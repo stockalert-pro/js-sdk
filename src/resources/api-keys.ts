@@ -21,7 +21,7 @@ export class ApiKeysResource extends BaseResource {
   create(data: CreateApiKeyRequest): Promise<ApiKey> {
     this.validateCreateRequest(data);
     // Type assertion needed due to TypeScript limitations with index signatures
-    return this.post<ApiKey>('/api-keys', data as Record<string, unknown>);
+    return this.post<ApiKey>('/api-keys', data as unknown as Record<string, unknown>);
   }
 
   /**

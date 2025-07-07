@@ -24,7 +24,7 @@ export class AlertsResource extends BaseResource {
   create(data: CreateAlertRequest): Promise<Alert> {
     this.validateCreateRequest(data);
     // Type assertion needed due to TypeScript limitations with index signatures
-    return this.post<Alert>('/alerts', data as Record<string, unknown>);
+    return this.post<Alert>('/alerts', data as unknown as Record<string, unknown>);
   }
 
   /**
@@ -46,7 +46,7 @@ export class AlertsResource extends BaseResource {
     }
     this.validateUpdateRequest(data);
     // Type assertion needed due to TypeScript limitations with index signatures
-    return this.put<Alert>(`/alerts/${encodeURIComponent(id)}`, data as Record<string, unknown>);
+    return this.put<Alert>(`/alerts/${encodeURIComponent(id)}`, data as unknown as Record<string, unknown>);
   }
 
   /**
