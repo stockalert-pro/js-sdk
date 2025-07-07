@@ -38,18 +38,18 @@ describe('Type Guards', () => {
     it('should return true for valid error object', () => {
       const error = {
         error: 'Something went wrong',
-        statusCode: 500
+        status_code: 500
       };
 
       expect(isApiError(error)).toBe(true);
     });
 
-    it('should return true even without statusCode', () => {
+    it('should return false without status_code', () => {
       const error = {
         error: 'Something went wrong'
       };
 
-      expect(isApiError(error)).toBe(true);
+      expect(isApiError(error)).toBe(false);
     });
 
     it('should return false for invalid objects', () => {

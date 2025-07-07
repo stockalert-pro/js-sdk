@@ -12,6 +12,8 @@ import type {
 export class AlertsResource extends BaseResource {
   /**
    * List all alerts with optional filtering
+   * @param params - Optional filter parameters
+   * @returns Paginated list of alerts
    */
   list(params?: ListAlertsParams): Promise<PaginatedResponse<Alert>> {
     const sanitizedParams = params ? this.sanitizeListParams(params) : undefined;
@@ -20,51 +22,59 @@ export class AlertsResource extends BaseResource {
 
   /**
    * Create a new alert
+   * @param data - Alert configuration
+   * @returns Created alert
+   * @throws {ValidationError} If input validation fails
    */
   create(data: CreateAlertRequest): Promise<Alert> {
     this.validateCreateRequest(data);
-    // Type assertion needed due to TypeScript limitations with index signatures
-    return this.post<Alert>('/alerts', data as unknown as Record<string, unknown>);
+    // Proper solution: convert to Record without type assertion
+    return this.post<Alert>('/alerts', this.toRecord(data));
   }
 
   /**
    * Get a specific alert by ID
+   * @param id - Alert ID
+   * @returns Alert details
+   * @throws {ValidationError} If ID is invalid
    */
   retrieve(id: string): Promise<Alert> {
-    if (!id || id.trim() === '') {
-      throw new ValidationError('Alert ID is required');
-    }
+    this.validateId(id, 'Alert');
     return this.get<Alert>(`/alerts/${encodeURIComponent(id)}`);
   }
 
   /**
    * Update an alert's status
+   * @param id - Alert ID
+   * @param data - Update data
+   * @returns Updated alert
+   * @throws {ValidationError} If input validation fails
    */
   update(id: string, data: UpdateAlertRequest): Promise<Alert> {
-    if (!id || id.trim() === '') {
-      throw new ValidationError('Alert ID is required');
-    }
+    this.validateId(id, 'Alert');
     this.validateUpdateRequest(data);
-    // Type assertion needed due to TypeScript limitations with index signatures
-    return this.put<Alert>(`/alerts/${encodeURIComponent(id)}`, data as unknown as Record<string, unknown>);
+    return this.put<Alert>(`/alerts/${encodeURIComponent(id)}`, this.toRecord(data));
   }
 
   /**
    * Delete an alert
+   * @param id - Alert ID
+   * @returns Deletion confirmation
+   * @throws {ValidationError} If ID is invalid
    */
   remove(id: string): Promise<DeleteResponse> {
-    if (!id || id.trim() === '') {
-      throw new ValidationError('Alert ID is required');
-    }
+    this.validateId(id, 'Alert');
     return this.delete<DeleteResponse>(`/alerts/${encodeURIComponent(id)}`);
   }
 
   /**
    * Iterate through all alerts with automatic pagination
+   * @param params - Optional filter parameters
+   * @yields Individual alerts
    */
   async *iterate(params?: ListAlertsParams): AsyncGenerator<Alert, void, undefined> {
     let offset = 0;
-    const limit = params?.limit ?? 100;
+    const limit = Math.min(params?.limit ?? 100, 100); // Cap at 100 for performance
     const baseParams = params ? { ...params } : {};
     delete baseParams.limit;
     delete baseParams.offset;
@@ -80,13 +90,44 @@ export class AlertsResource extends BaseResource {
         yield alert;
       }
       
+      // Check if we've reached the end
       if (response.data.length < limit || 
-          (response.meta.total !== undefined && offset + limit >= response.meta.total)) {
+          (response.meta.total !== undefined && offset + response.data.length >= response.meta.total)) {
         break;
       }
       
-      offset += limit;
+      offset += response.data.length; // Use actual count, not limit
     }
+  }
+
+  /**
+   * Batch create multiple alerts
+   * @param alerts - Array of alert configurations
+   * @returns Array of created alerts
+   */
+  async createBatch(alerts: CreateAlertRequest[]): Promise<Alert[]> {
+    // Validate all alerts first
+    alerts.forEach((alert, index) => {
+      try {
+        this.validateCreateRequest(alert);
+      } catch (error) {
+        throw new ValidationError(`Alert at index ${index}: ${(error as Error).message}`);
+      }
+    });
+
+    // Create alerts in parallel with concurrency limit
+    const concurrencyLimit = 5;
+    const results: Alert[] = [];
+    
+    for (let i = 0; i < alerts.length; i += concurrencyLimit) {
+      const batch = alerts.slice(i, i + concurrencyLimit);
+      const batchResults = await Promise.all(
+        batch.map(alert => this.create(alert))
+      );
+      results.push(...batchResults);
+    }
+    
+    return results;
   }
 
   private validateCreateRequest(data: CreateAlertRequest): void {
@@ -98,18 +139,92 @@ export class AlertsResource extends BaseResource {
       throw new ValidationError('Condition is required and must be a non-empty string');
     }
     
-    if (typeof data.threshold !== 'number' || isNaN(data.threshold)) {
-      throw new ValidationError('Threshold is required and must be a number');
+    if (typeof data.threshold !== 'number' || isNaN(data.threshold) || !isFinite(data.threshold)) {
+      throw new ValidationError('Threshold is required and must be a valid number');
     }
     
     if (!data.notification || typeof data.notification !== 'string' || data.notification.trim() === '') {
       throw new ValidationError('Notification channel is required and must be a non-empty string');
+    }
+
+    // Validate symbol format (basic check)
+    if (!/^[A-Z]{1,5}$/.test(data.symbol.trim())) {
+      throw new ValidationError('Symbol must be 1-5 uppercase letters');
+    }
+
+    // Validate notification channel
+    const validChannels = ['email', 'sms', 'whatsapp'];
+    if (!validChannels.includes(data.notification)) {
+      throw new ValidationError(`Notification must be one of: ${validChannels.join(', ')}`);
+    }
+
+    // Validate condition-specific requirements
+    this.validateConditionSpecificRequirements(data);
+  }
+
+  private validateConditionSpecificRequirements(data: CreateAlertRequest): void {
+    switch (data.condition) {
+      case 'ma_crossover_golden':
+      case 'ma_crossover_death':
+        // These don't require threshold
+        if (data.threshold !== 0 && data.threshold !== undefined) {
+          throw new ValidationError(`${data.condition} does not use a threshold value`);
+        }
+        break;
+
+      case 'ma_touch_above':
+      case 'ma_touch_below':
+        if (!data.parameters?.ma_period) {
+          throw new ValidationError(`${data.condition} requires ma_period parameter (50 or 200)`);
+        }
+        if (![50, 200].includes(data.parameters.ma_period as number)) {
+          throw new ValidationError('ma_period must be either 50 or 200');
+        }
+        break;
+
+      case 'rsi_limit':
+        if (data.threshold < 0 || data.threshold > 100) {
+          throw new ValidationError('RSI threshold must be between 0 and 100');
+        }
+        break;
+
+      case 'reminder':
+        if (!data.parameters?.reminder_date || !data.parameters?.reminder_time) {
+          throw new ValidationError('Reminder alerts require reminder_date and reminder_time parameters');
+        }
+        break;
+
+      case 'daily_reminder':
+        if (!data.parameters?.reminder_time) {
+          throw new ValidationError('Daily reminder alerts require reminder_time parameter');
+        }
+        break;
+
+      case 'price_change_up':
+      case 'price_change_down':
+      case 'volume_change':
+        if (data.threshold < 0) {
+          throw new ValidationError(`${data.condition} threshold must be a positive percentage`);
+        }
+        break;
     }
   }
 
   private validateUpdateRequest(data: UpdateAlertRequest): void {
     if (!data.status || !['active', 'paused'].includes(data.status)) {
       throw new ValidationError('Status must be either "active" or "paused"');
+    }
+  }
+
+  private validateId(id: string, type: string): void {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new ValidationError(`${type} ID is required`);
+    }
+    
+    // Basic UUID v4 validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      throw new ValidationError(`${type} ID must be a valid UUID`);
     }
   }
 
@@ -125,15 +240,17 @@ export class AlertsResource extends BaseResource {
       sanitized['condition'] = params.condition;
     }
     if (params.symbol !== undefined) {
-      sanitized['symbol'] = params.symbol;
+      sanitized['symbol'] = params.symbol.toUpperCase();
     }
-    if (typeof params.limit === 'number') {
-      sanitized['limit'] = params.limit;
+    if (typeof params.limit === 'number' && params.limit > 0 && params.limit <= 100) {
+      sanitized['limit'] = Math.floor(params.limit);
     }
-    if (typeof params.offset === 'number') {
-      sanitized['offset'] = params.offset;
+    if (typeof params.offset === 'number' && params.offset >= 0) {
+      sanitized['offset'] = Math.floor(params.offset);
     }
     
     return sanitized;
   }
+
+  // toRecord method is inherited from BaseResource
 }

@@ -6,12 +6,16 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  minify: false,
+  minify: true,
   treeshake: true,
   splitting: false,
   target: 'es2020',
   external: ['crypto'],
   noExternal: [],
-  platform: 'node',
+  platform: 'neutral',
   shims: true,
+  esbuildOptions(options) {
+    options.drop = ['console', 'debugger'];
+    options.keepNames = true;
+  },
 });

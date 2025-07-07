@@ -97,17 +97,18 @@ describe('StockAlert Client', () => {
       expect(config1).toEqual(config2); // Same content
     });
 
-    it('should return readonly config', () => {
+    it('should return masked config', () => {
       const client = new StockAlert({
         apiKey: 'sk_test_key_123'
       });
       
       const config = client.getConfig();
-      expect(config.apiKey).toBe('sk_test_key_123');
+      expect(config.apiKey).toBe('sk_tes..._123'); // API key is masked
       
-      // Modifying the returned config should not affect the client
-      config.apiKey = 'modified';
-      expect(client.getConfig().apiKey).toBe('sk_test_key_123');
+      // Config should be a copy
+      const config2 = client.getConfig();
+      expect(config).not.toBe(config2);
+      expect(config.apiKey).toBe(config2.apiKey);
     });
   });
 });
