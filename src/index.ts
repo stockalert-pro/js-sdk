@@ -16,4 +16,4 @@ export { WebhooksResource, type WebhookPayload } from './resources/webhooks';
 export { detectEnvironment, checkBrowserSecurity, type Environment } from './utils/environment';
 
 // Version
-export const VERSION = '1.0.3';
+export const VERSION = '1.1.0';
