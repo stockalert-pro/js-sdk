@@ -3,8 +3,15 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['cjs', 'esm'],
-  dts: false, // Temporarily disable DTS due to type issues
+  dts: true,
   sourcemap: true,
   clean: true,
   minify: false,
+  treeshake: true,
+  splitting: false,
+  target: 'es2020',
+  external: ['crypto'],
+  noExternal: [],
+  platform: 'node',
+  shims: true,
 });

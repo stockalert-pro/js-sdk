@@ -1,3 +1,4 @@
+// Alert Types
 export interface Alert {
   id: string;
   symbol: string;
@@ -44,6 +45,7 @@ export interface AlertParameters {
   [key: string]: string | number | boolean | undefined;
 }
 
+// Request Types
 export interface CreateAlertRequest {
   symbol: string;
   condition: AlertCondition;
@@ -64,6 +66,7 @@ export interface ListAlertsParams {
   offset?: number;
 }
 
+// API Key Types
 export interface ApiKey {
   id: string;
   name: string;
@@ -78,6 +81,7 @@ export interface CreateApiKeyRequest {
   permissions?: string[];
 }
 
+// Response Types
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {
@@ -93,6 +97,11 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+export interface DeleteResponse {
+  message: string;
+}
+
+// Config Types
 export interface StockAlertConfig {
   apiKey: string;
   baseUrl?: string;
@@ -101,9 +110,31 @@ export interface StockAlertConfig {
   debug?: boolean;
 }
 
+// Internal Types
 export interface RequestOptions {
   params?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
   body?: Record<string, unknown>;
   timeout?: number;
+}
+
+// Type Guards
+export function isAlert(obj: unknown): obj is Alert {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'id' in obj &&
+    'symbol' in obj &&
+    'condition' in obj &&
+    'threshold' in obj
+  );
+}
+
+export function isApiError(error: unknown): error is { error: string; statusCode?: number } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'error' in error &&
+    typeof (error as Record<string, unknown>)['error'] === 'string'
+  );
 }
