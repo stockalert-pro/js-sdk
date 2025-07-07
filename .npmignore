@@ -1,0 +1,24 @@
+# Source files
+src/
+examples/
+.github/
+
+# Config files
+tsconfig.json
+tsup.config.ts
+.gitignore
+.npmignore
+
+# Development files
+*.test.ts
+*.spec.ts
+coverage/
+.nyc_output/
+
+# CI/CD
+.github/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
