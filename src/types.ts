@@ -177,7 +177,7 @@ export interface ErrorResponse {
 
 // Type Guards with better implementation
 export function isAlert(obj: unknown): obj is Alert {
-  if (!obj || typeof obj !== 'object') return false;
+  if (!obj || typeof obj !== 'object') {return false;}
   
   const a = obj as Record<string, unknown>;
   return (
@@ -193,7 +193,7 @@ export function isAlert(obj: unknown): obj is Alert {
 }
 
 export function isApiError(error: unknown): error is ErrorResponse {
-  if (!error || typeof error !== 'object') return false;
+  if (!error || typeof error !== 'object') {return false;}
   
   const e = error as Record<string, unknown>;
   return (
@@ -206,7 +206,7 @@ export function isPaginatedResponse<T>(
   obj: unknown,
   itemGuard: (item: unknown) => item is T
 ): obj is PaginatedResponse<T> {
-  if (!obj || typeof obj !== 'object') return false;
+  if (!obj || typeof obj !== 'object') {return false;}
   
   const r = obj as Record<string, unknown>;
   return (

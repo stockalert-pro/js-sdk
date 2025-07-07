@@ -10,8 +10,8 @@ export interface Environment {
 export function detectEnvironment(): Environment {
   const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
   const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
-  const isWorker = typeof self !== 'undefined' && typeof (self as any).importScripts === 'function';
-  const isDeno = typeof (globalThis as any).Deno !== 'undefined';
+  const isWorker = typeof self !== 'undefined' && typeof (self as { importScripts?: Function }).importScripts === 'function';
+  const isDeno = typeof (globalThis as { Deno?: unknown }).Deno !== 'undefined';
   const isJest = typeof process !== 'undefined' && process.env.JEST_WORKER_ID !== undefined;
   const isDebug = typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
 

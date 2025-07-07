@@ -19,7 +19,7 @@ interface ResourceConfig {
 
 export abstract class BaseResource {
   protected readonly config: ResourceConfig;
-  private readonly pendingRequests = new Map<string, Promise<any>>();
+  private readonly pendingRequests = new Map<string, Promise<unknown>>();
   private readonly rateLimitReset = new Map<string, number>();
 
   constructor(config: ResourceConfig) {
@@ -223,7 +223,7 @@ export abstract class BaseResource {
     return this.request<T>('DELETE', path, options);
   }
 
-  protected toRecord<T extends Record<string, any>>(data: T): Record<string, unknown> {
+  protected toRecord(data: unknown): Record<string, unknown> {
     // Safe conversion without type assertions
     return JSON.parse(JSON.stringify(data)) as Record<string, unknown>;
   }

@@ -1,0 +1,16 @@
+
+# Check if package.json was modified
+if git diff --cached --name-only | grep -q "package.json"; then
+  echo "📦 package.json was modified, updating package-lock.json..."
+  
+  # Run npm install to update lock file
+  npm install --package-lock-only
+  
+  # Add the updated lock file to the commit
+  git add package-lock.json
+  
+  echo "✅ package-lock.json updated and added to commit"
+fi
+
+# Run tests before commit
+npm run lint && npm run typecheck && npm run test
