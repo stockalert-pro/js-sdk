@@ -1,22 +1,23 @@
 // Polyfill for crypto.getRandomValues in Node < 19
-import { webcrypto } from 'crypto';
+import crypto from 'crypto';
 
-if (typeof globalThis.crypto === 'undefined') {
+// @ts-expect-error - polyfill
+if (!globalThis.crypto) {
   // @ts-expect-error - polyfill
-  globalThis.crypto = webcrypto;
+  globalThis.crypto = {};
 }
 
-// Alternative approach if webcrypto is not available
-if (!globalThis.crypto?.getRandomValues) {
-  const nodeCrypto = require('crypto');
-  
-  if (!globalThis.crypto) {
-    // @ts-expect-error - polyfill
-    globalThis.crypto = {};
-  }
-  
+// @ts-expect-error - polyfill
+if (!globalThis.crypto.getRandomValues) {
   // @ts-expect-error - polyfill
-  globalThis.crypto.getRandomValues = function(array: Uint8Array) {
-    return nodeCrypto.randomFillSync(array);
+  globalThis.crypto.getRandomValues = function(array: any) {
+    return crypto.randomFillSync(array);
   };
+}
+
+// Also polyfill webcrypto if needed
+// @ts-expect-error - polyfill
+if (!globalThis.crypto.subtle && crypto.webcrypto) {
+  // @ts-expect-error - polyfill
+  Object.assign(globalThis.crypto, crypto.webcrypto);
 }
