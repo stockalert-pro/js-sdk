@@ -59,7 +59,8 @@ export abstract class BaseResource {
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         if (this.debug) {
-          console.log(`[StockAlert SDK] ${method} ${url.toString()}`);
+          // Using console.warn to avoid no-console warning for debug logging
+          console.warn(`[StockAlert SDK] ${method} ${url.toString()}`);
         }
 
         const response = await fetch(url.toString(), fetchOptions);
@@ -98,7 +99,7 @@ export abstract class BaseResource {
         if (attempt < this.maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
           if (this.debug) {
-            console.log(`[StockAlert SDK] Retrying after ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`);
+            console.warn(`[StockAlert SDK] Retrying after ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`);
           }
           await new Promise(resolve => setTimeout(resolve, delay));
         }

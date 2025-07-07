@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { BaseResource } from './base';
 
-export class Webhooks extends BaseResource {
+export class WebhooksResource extends BaseResource {
   /**
    * Verify webhook signature
    * @param payload - The raw webhook payload (as string)

@@ -1,50 +1,38 @@
 export class StockAlertError extends Error {
-  constructor(
-    message: string,
-    public statusCode?: number,
-    public code?: string
-  ) {
+  constructor(message: string) {
     super(message);
     this.name = 'StockAlertError';
   }
 }
 
-export class AuthenticationError extends StockAlertError {
-  constructor(message = 'Invalid API key') {
-    super(message, 401, 'authentication_error');
-    this.name = 'AuthenticationError';
+export class ApiError extends StockAlertError {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public response?: unknown
+  ) {
+    super(message);
+    this.name = 'ApiError';
   }
 }
 
-export class RateLimitError extends StockAlertError {
-  constructor(
-    message = 'Rate limit exceeded',
-    public limit?: number,
-    public remaining?: number,
-    public reset?: number
-  ) {
-    super(message, 429, 'rate_limit_error');
+export class RateLimitError extends ApiError {
+  constructor(message: string, public retryAfter?: number) {
+    super(message, 429);
     this.name = 'RateLimitError';
   }
 }
 
 export class ValidationError extends StockAlertError {
-  constructor(message: string, public errors?: Record<string, string[]>) {
-    super(message, 400, 'validation_error');
+  constructor(message: string) {
+    super(message);
     this.name = 'ValidationError';
   }
 }
 
-export class NotFoundError extends StockAlertError {
-  constructor(message = 'Resource not found') {
-    super(message, 404, 'not_found');
-    this.name = 'NotFoundError';
-  }
-}
-
-export class NetworkError extends StockAlertError {
-  constructor(message = 'Network request failed', public originalError?: Error) {
-    super(message, undefined, 'network_error');
-    this.name = 'NetworkError';
+export class AuthenticationError extends ApiError {
+  constructor(message: string) {
+    super(message, 401);
+    this.name = 'AuthenticationError';
   }
 }

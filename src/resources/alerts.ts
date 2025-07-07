@@ -5,84 +5,63 @@ import type {
   UpdateAlertRequest,
   ListAlertsParams,
   PaginatedResponse,
-  ApiResponse,
 } from '../types';
 
 export class AlertsResource extends BaseResource {
   /**
    * List all alerts
    */
-  async list(params: ListAlertsParams = {}): Promise<PaginatedResponse<Alert>> {
-    const queryString = this.buildQueryString(params);
-    return this.request<PaginatedResponse<Alert>>(`/alerts${queryString}`);
+  async list(params?: ListAlertsParams): Promise<PaginatedResponse<Alert>> {
+    return this.get<PaginatedResponse<Alert>>('/alerts', { params });
   }
 
   /**
    * Create a new alert
    */
-  async create(data: CreateAlertRequest): Promise<ApiResponse<Alert>> {
-    return this.request<ApiResponse<Alert>>('/alerts', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async create(data: CreateAlertRequest): Promise<Alert> {
+    return this.post<Alert>('/alerts', data as Record<string, unknown>);
   }
 
   /**
    * Get a specific alert
    */
-  async get(id: string): Promise<ApiResponse<Alert>> {
-    return this.request<ApiResponse<Alert>>(`/alerts/${id}`);
+  async retrieve(id: string): Promise<Alert> {
+    return this.get<Alert>(`/alerts/${id}`);
   }
 
   /**
-   * Update an alert's status
+   * Update an alert
    */
-  async update(id: string, data: UpdateAlertRequest): Promise<ApiResponse<Alert>> {
-    return this.request<ApiResponse<Alert>>(`/alerts/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+  async update(id: string, data: UpdateAlertRequest): Promise<Alert> {
+    return this.put<Alert>(`/alerts/${id}`, data as Record<string, unknown>);
   }
 
   /**
    * Delete an alert
    */
-  async delete(id: string): Promise<ApiResponse<{ message: string }>> {
-    return this.request<ApiResponse<{ message: string }>>(`/alerts/${id}`, {
-      method: 'DELETE',
-    });
+  async remove(id: string): Promise<{ message: string }> {
+    return this.delete<{ message: string }>(`/alerts/${id}`);
   }
 
   /**
-   * Pause an alert (convenience method)
+   * Iterate through all alerts with automatic pagination
    */
-  async pause(id: string): Promise<ApiResponse<Alert>> {
-    return this.update(id, { status: 'paused' });
-  }
-
-  /**
-   * Activate an alert (convenience method)
-   */
-  async activate(id: string): Promise<ApiResponse<Alert>> {
-    return this.update(id, { status: 'active' });
-  }
-
-  /**
-   * List all alerts with automatic pagination
-   */
-  async *listAll(params: Omit<ListAlertsParams, 'page'> = {}): AsyncGenerator<Alert, void, unknown> {
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore) {
-      const response = await this.list({ ...params, page });
+  async *iterate(params?: ListAlertsParams): AsyncGenerator<Alert> {
+    let offset = 0;
+    const limit = params?.limit || 100;
+    
+    while (true) {
+      const response = await this.list({ ...params, limit, offset });
       
       for (const alert of response.data) {
         yield alert;
       }
-
-      hasMore = page < response.pagination.totalPages;
-      page++;
+      
+      if (response.data.length < limit) {
+        break;
+      }
+      
+      offset += limit;
     }
   }
 }
