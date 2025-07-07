@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { StockAlert } from '../src/client';
 import { ValidationError } from '../src/errors';
 
