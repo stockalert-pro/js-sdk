@@ -138,24 +138,18 @@ export class AlertsResource extends BaseResource {
     if (!data.condition || typeof data.condition !== 'string' || data.condition.trim() === '') {
       throw new ValidationError('Condition is required and must be a non-empty string');
     }
-    
-    if (typeof data.threshold !== 'number' || isNaN(data.threshold) || !isFinite(data.threshold)) {
-      throw new ValidationError('Threshold is required and must be a valid number');
-    }
-    
-    if (!data.notification || typeof data.notification !== 'string' || data.notification.trim() === '') {
-      throw new ValidationError('Notification channel is required and must be a non-empty string');
-    }
 
     // Validate symbol format (basic check)
     if (!/^[A-Z]{1,5}$/.test(data.symbol.trim())) {
       throw new ValidationError('Symbol must be 1-5 uppercase letters');
     }
 
-    // Validate notification channel
-    const validChannels = ['email', 'sms', 'whatsapp'];
-    if (!validChannels.includes(data.notification)) {
-      throw new ValidationError(`Notification must be one of: ${validChannels.join(', ')}`);
+    // Validate notification channel if provided
+    if (data.notification) {
+      const validChannels = ['email', 'sms'];
+      if (!validChannels.includes(data.notification)) {
+        throw new ValidationError(`Notification must be one of: ${validChannels.join(', ')}`);
+      }
     }
 
     // Validate condition-specific requirements
@@ -163,15 +157,30 @@ export class AlertsResource extends BaseResource {
   }
 
   private validateConditionSpecificRequirements(data: CreateAlertRequest): void {
-    switch (data.condition) {
-      case 'ma_crossover_golden':
-      case 'ma_crossover_death':
-        // These don't require threshold
-        if (data.threshold !== 0 && data.threshold !== undefined) {
-          throw new ValidationError(`${data.condition} does not use a threshold value`);
-        }
-        break;
+    const requiresThreshold = [
+      'price_above', 'price_below', 'price_change_up', 'price_change_down',
+      'new_high', 'new_low', 'ma_touch_above', 'ma_touch_below',
+      'volume_change', 'rsi_limit', 'pe_ratio_below', 'pe_ratio_above',
+      'forward_pe_below', 'forward_pe_above'
+    ];
 
+    const noThreshold = [
+      'ma_crossover_golden', 'ma_crossover_death', 'reminder', 'daily_reminder',
+      'earnings_announcement', 'dividend_ex_date', 'dividend_payment'
+    ];
+
+    if (requiresThreshold.includes(data.condition)) {
+      if (typeof data.threshold !== 'number' || isNaN(data.threshold) || !isFinite(data.threshold)) {
+        throw new ValidationError(`${data.condition} requires a valid threshold value`);
+      }
+    }
+
+    if (noThreshold.includes(data.condition) && data.threshold !== undefined) {
+      throw new ValidationError(`${data.condition} does not use a threshold value`);
+    }
+
+    // Specific validations
+    switch (data.condition) {
       case 'ma_touch_above':
       case 'ma_touch_below':
         if (!data.parameters?.ma_period) {
@@ -183,7 +192,7 @@ export class AlertsResource extends BaseResource {
         break;
 
       case 'rsi_limit':
-        if (data.threshold < 0 || data.threshold > 100) {
+        if (data.threshold !== undefined && (data.threshold < 0 || data.threshold > 100)) {
           throw new ValidationError('RSI threshold must be between 0 and 100');
         }
         break;
@@ -203,7 +212,7 @@ export class AlertsResource extends BaseResource {
       case 'price_change_up':
       case 'price_change_down':
       case 'volume_change':
-        if (data.threshold < 0) {
+        if (data.threshold !== undefined && data.threshold < 0) {
           throw new ValidationError(`${data.condition} threshold must be a positive percentage`);
         }
         break;

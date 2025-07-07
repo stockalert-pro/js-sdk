@@ -50,13 +50,25 @@ export type AlertConditionConfig =
   | {
       condition: 'pe_ratio_below' | 'pe_ratio_above';
       threshold: number;
+    }
+  | {
+      condition: 'forward_pe_below' | 'forward_pe_above';
+      threshold: number;
+    }
+  | {
+      condition: 'earnings_announcement';
+      threshold?: never;
+    }
+  | {
+      condition: 'dividend_ex_date' | 'dividend_payment';
+      threshold?: never;
     };
 
 export interface Alert {
   id: string; // Will be AlertId when fetched through SDK
   symbol: string;
   condition: AlertCondition;
-  threshold: number;
+  threshold?: number;
   notification: NotificationChannel;
   status: AlertStatus;
   created_at: string;
@@ -68,7 +80,7 @@ export interface Alert {
 
 export type AlertCondition = AlertConditionConfig['condition'];
 
-export type NotificationChannel = 'email' | 'sms' | 'whatsapp';
+export type NotificationChannel = 'email' | 'sms';
 export type AlertStatus = 'active' | 'paused' | 'triggered';
 
 export interface AlertParameters {
@@ -86,8 +98,8 @@ export interface AlertParameters {
 export interface CreateAlertRequest {
   symbol: string;
   condition: AlertCondition;
-  threshold: number;
-  notification: NotificationChannel;
+  threshold?: number;
+  notification?: NotificationChannel;
   parameters?: AlertParameters;
 }
 
@@ -184,7 +196,6 @@ export function isAlert(obj: unknown): obj is Alert {
     typeof a.id === 'string' &&
     typeof a.symbol === 'string' &&
     typeof a.condition === 'string' &&
-    typeof a.threshold === 'number' &&
     typeof a.notification === 'string' &&
     typeof a.status === 'string' &&
     typeof a.created_at === 'string' &&
