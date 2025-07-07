@@ -123,5 +123,3 @@ export class StockAlert {
     return `${apiKey.substring(0, 6)}...${apiKey.substring(apiKey.length - 4)}`;
   }
 }
-
-export default StockAlert;

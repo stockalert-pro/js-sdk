@@ -1,6 +1,6 @@
 {
   "name": "@stockalert/sdk",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Official JavaScript/TypeScript SDK for StockAlert.pro API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -16,9 +16,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+    "dist/*.js",
+    "dist/*.mjs",
+    "dist/*.d.ts"
   ],
   "scripts": {
     "build": "tsup",
@@ -33,7 +33,8 @@
     "test:ui": "vitest --ui",
     "size": "size-limit",
     "analyze": "size-limit --why",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build && cp README-npm.md README.md",
+    "postpublish": "git checkout README.md",
     "prepare": "npm run build && husky install",
     "postinstall": "husky install"
   },

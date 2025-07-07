@@ -1,24 +1,81 @@
 # Source files
 src/
+*.ts
+!*.d.ts
+
+# Tests
+tests/
+*.test.*
+*.spec.*
+coverage/
+.nyc_output/
+vitest.config.ts
+
+# Development files
 examples/
+docs/
 .github/
+.husky/
+.vscode/
+.idea/
 
 # Config files
 tsconfig.json
 tsup.config.ts
+.eslintrc.*
+.prettierrc
 .gitignore
 .npmignore
-
-# Development files
-*.test.ts
-*.spec.ts
-coverage/
-.nyc_output/
+.editorconfig
+vitest.config.*
 
 # CI/CD
+.travis.yml
+.gitlab-ci.yml
+.circleci/
+azure-pipelines.yml
 .github/
+
+# Build files
+*.map
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # Temporary files
 *.tmp
 *.temp
-.DS_Store
+*.swp
+*.swo
+*~
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Documentation
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+*.md
+
+# Development scripts
+scripts/
+*.sh
+
+# Size limit
+.size-limit.json
