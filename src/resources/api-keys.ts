@@ -17,7 +17,7 @@ export class ApiKeysResource extends BaseResource {
    * Create a new API key
    */
   async create(data: CreateApiKeyRequest): Promise<ApiKey> {
-    return this.post<ApiKey>('/api-keys', data as Record<string, unknown>);
+    return this.post<ApiKey>('/api-keys', data as unknown as Record<string, unknown>);
   }
 
   /**

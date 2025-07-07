@@ -12,14 +12,14 @@ export class AlertsResource extends BaseResource {
    * List all alerts
    */
   async list(params?: ListAlertsParams): Promise<PaginatedResponse<Alert>> {
-    return this.get<PaginatedResponse<Alert>>('/alerts', { params });
+    return this.get<PaginatedResponse<Alert>>('/alerts', { params: params as Record<string, string | number | boolean | undefined> });
   }
 
   /**
    * Create a new alert
    */
   async create(data: CreateAlertRequest): Promise<Alert> {
-    return this.post<Alert>('/alerts', data as Record<string, unknown>);
+    return this.post<Alert>('/alerts', data as unknown as Record<string, unknown>);
   }
 
   /**
@@ -33,7 +33,7 @@ export class AlertsResource extends BaseResource {
    * Update an alert
    */
   async update(id: string, data: UpdateAlertRequest): Promise<Alert> {
-    return this.put<Alert>(`/alerts/${id}`, data as Record<string, unknown>);
+    return this.put<Alert>(`/alerts/${id}`, data as unknown as Record<string, unknown>);
   }
 
   /**
