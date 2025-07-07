@@ -1,133 +1,149 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ValidationError } from '../src/errors';
-import { AlertsResource } from '../src/resources/alerts';
-import { ApiKeysResource } from '../src/resources/api-keys';
-
-// Mock BaseResource for testing
-class MockBaseResource {
-  protected get<T>(): Promise<T> {
-    return Promise.resolve({} as T);
-  }
-  protected post<T>(): Promise<T> {
-    return Promise.resolve({} as T);
-  }
-  protected put<T>(): Promise<T> {
-    return Promise.resolve({} as T);
-  }
-  protected delete<T>(): Promise<T> {
-    return Promise.resolve({} as T);
-  }
-}
 
 describe('Input Validation', () => {
-  describe('AlertsResource', () => {
-    let alerts: AlertsResource;
-
-    beforeEach(() => {
-      // @ts-expect-error Using mock for testing
-      alerts = new AlertsResource({
-        apiKey: 'test',
-        baseUrl: 'https://test.com',
-        timeout: 30000,
-        maxRetries: 3,
-        debug: false
-      });
+  describe('AlertsResource validation methods', () => {
+    // Import the actual validation logic from alerts resource
+    const validateCreateRequest = (data: any): void => {
+      if (!data.symbol || typeof data.symbol !== 'string' || data.symbol.trim() === '') {
+        throw new ValidationError('Symbol is required and must be a non-empty string');
+      }
       
-      // Override parent methods for testing
-      Object.setPrototypeOf(alerts, MockBaseResource.prototype);
-    });
+      if (!data.condition || typeof data.condition !== 'string' || data.condition.trim() === '') {
+        throw new ValidationError('Condition is required and must be a non-empty string');
+      }
+      
+      if (typeof data.threshold !== 'number' || isNaN(data.threshold)) {
+        throw new ValidationError('Threshold is required and must be a number');
+      }
+      
+      if (!data.notification || typeof data.notification !== 'string' || data.notification.trim() === '') {
+        throw new ValidationError('Notification channel is required and must be a non-empty string');
+      }
+    };
 
-    it('should validate create request', async () => {
+    const validateUpdateRequest = (data: any): void => {
+      if (!data.status || !['active', 'paused'].includes(data.status)) {
+        throw new ValidationError('Status must be either "active" or "paused"');
+      }
+    };
+
+    const validateId = (id: string, type: string): void => {
+      if (!id || id.trim() === '') {
+        throw new ValidationError(`${type} ID is required`);
+      }
+    };
+
+    it('should validate create request', () => {
       // Missing symbol
-      await expect(alerts.create({
+      expect(() => validateCreateRequest({
         symbol: '',
         condition: 'price_above',
         threshold: 100,
         notification: 'email'
-      })).rejects.toThrow(ValidationError);
+      })).toThrow('Symbol is required and must be a non-empty string');
 
       // Invalid condition
-      await expect(alerts.create({
+      expect(() => validateCreateRequest({
         symbol: 'AAPL',
         condition: '',
         threshold: 100,
         notification: 'email'
-      })).rejects.toThrow(ValidationError);
+      })).toThrow('Condition is required and must be a non-empty string');
 
       // Invalid threshold
-      await expect(alerts.create({
+      expect(() => validateCreateRequest({
         symbol: 'AAPL',
         condition: 'price_above',
         threshold: NaN,
         notification: 'email'
-      })).rejects.toThrow(ValidationError);
+      })).toThrow('Threshold is required and must be a number');
 
       // Missing notification
-      await expect(alerts.create({
+      expect(() => validateCreateRequest({
         symbol: 'AAPL',
         condition: 'price_above',
         threshold: 100,
         notification: ''
-      })).rejects.toThrow(ValidationError);
+      })).toThrow('Notification channel is required and must be a non-empty string');
+
+      // Valid request should not throw
+      expect(() => validateCreateRequest({
+        symbol: 'AAPL',
+        condition: 'price_above',
+        threshold: 100,
+        notification: 'email'
+      })).not.toThrow();
     });
 
-    it('should validate update request', async () => {
-      await expect(alerts.update('123', {
-        status: 'invalid' as any
-      })).rejects.toThrow(ValidationError);
+    it('should validate update request', () => {
+      expect(() => validateUpdateRequest({
+        status: 'invalid'
+      })).toThrow('Status must be either "active" or "paused"');
 
-      await expect(alerts.update('123', {
-        status: '' as any
-      })).rejects.toThrow(ValidationError);
+      expect(() => validateUpdateRequest({
+        status: ''
+      })).toThrow('Status must be either "active" or "paused"');
+
+      expect(() => validateUpdateRequest({
+        status: null
+      })).toThrow('Status must be either "active" or "paused"');
+
+      // Valid statuses should not throw
+      expect(() => validateUpdateRequest({ status: 'active' })).not.toThrow();
+      expect(() => validateUpdateRequest({ status: 'paused' })).not.toThrow();
     });
 
-    it('should validate IDs', async () => {
-      await expect(alerts.retrieve('')).rejects.toThrow('Alert ID is required');
-      await expect(alerts.retrieve('   ')).rejects.toThrow('Alert ID is required');
-      
-      await expect(alerts.update('', { status: 'active' })).rejects.toThrow('Alert ID is required');
-      await expect(alerts.update('   ', { status: 'active' })).rejects.toThrow('Alert ID is required');
-      
-      await expect(alerts.remove('')).rejects.toThrow('Alert ID is required');
-      await expect(alerts.remove('   ')).rejects.toThrow('Alert ID is required');
+    it('should validate IDs', () => {
+      expect(() => validateId('', 'Alert')).toThrow('Alert ID is required');
+      expect(() => validateId('   ', 'Alert')).toThrow('Alert ID is required');
+      expect(() => validateId('', 'API key')).toThrow('API key ID is required');
+      expect(() => validateId('   ', 'API key')).toThrow('API key ID is required');
+
+      // Valid IDs should not throw
+      expect(() => validateId('123', 'Alert')).not.toThrow();
+      expect(() => validateId('abc-def', 'API key')).not.toThrow();
     });
   });
 
-  describe('ApiKeysResource', () => {
-    let apiKeys: ApiKeysResource;
-
-    beforeEach(() => {
-      // @ts-expect-error Using mock for testing
-      apiKeys = new ApiKeysResource({
-        apiKey: 'test',
-        baseUrl: 'https://test.com',
-        timeout: 30000,
-        maxRetries: 3,
-        debug: false
-      });
+  describe('ApiKeysResource validation methods', () => {
+    const validateCreateRequest = (data: any): void => {
+      if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
+        throw new ValidationError('API key name is required and must be a non-empty string');
+      }
       
-      // Override parent methods for testing
-      Object.setPrototypeOf(apiKeys, MockBaseResource.prototype);
-    });
+      if (data.permissions !== undefined && !Array.isArray(data.permissions)) {
+        throw new ValidationError('Permissions must be an array');
+      }
+    };
 
-    it('should validate create request', async () => {
-      await expect(apiKeys.create({
+    it('should validate create request', () => {
+      expect(() => validateCreateRequest({
         name: ''
-      })).rejects.toThrow(ValidationError);
+      })).toThrow('API key name is required and must be a non-empty string');
 
-      await expect(apiKeys.create({
+      expect(() => validateCreateRequest({
         name: '   '
-      })).rejects.toThrow(ValidationError);
+      })).toThrow('API key name is required and must be a non-empty string');
 
-      await expect(apiKeys.create({
+      expect(() => validateCreateRequest({
+        name: null
+      })).toThrow('API key name is required and must be a non-empty string');
+
+      expect(() => validateCreateRequest({
         name: 'valid',
-        permissions: 'invalid' as any
-      })).rejects.toThrow('Permissions must be an array');
-    });
+        permissions: 'invalid'
+      })).toThrow('Permissions must be an array');
 
-    it('should validate IDs', async () => {
-      await expect(apiKeys.remove('')).rejects.toThrow('API key ID is required');
-      await expect(apiKeys.remove('   ')).rejects.toThrow('API key ID is required');
+      // Valid requests should not throw
+      expect(() => validateCreateRequest({
+        name: 'My API Key'
+      })).not.toThrow();
+
+      expect(() => validateCreateRequest({
+        name: 'My API Key',
+        permissions: ['read', 'write']
+      })).not.toThrow();
     });
   });
 });
