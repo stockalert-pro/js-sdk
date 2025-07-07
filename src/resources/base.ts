@@ -1,116 +1,128 @@
-import type { StockAlertConfig } from '../types';
-import { 
-  StockAlertError, 
-  AuthenticationError, 
-  RateLimitError,
-  ValidationError,
-  NotFoundError,
-  NetworkError 
-} from '../errors';
+import { StockAlertError, RateLimitError, ApiError } from '../errors';
+import type { ApiResponse, RequestOptions } from '../types';
 
 export abstract class BaseResource {
-  constructor(protected config: Required<StockAlertConfig>) {}
+  protected apiKey: string;
+  protected baseUrl: string;
+  protected timeout: number;
+  protected maxRetries: number;
+  protected debug: boolean;
+
+  constructor(config: {
+    apiKey: string;
+    baseUrl: string;
+    timeout: number;
+    maxRetries: number;
+    debug: boolean;
+  }) {
+    this.apiKey = config.apiKey;
+    this.baseUrl = config.baseUrl;
+    this.timeout = config.timeout;
+    this.maxRetries = config.maxRetries;
+    this.debug = config.debug;
+  }
 
   protected async request<T>(
+    method: string,
     path: string,
-    options: RequestInit = {}
+    options: RequestOptions = {}
   ): Promise<T> {
-    const url = `${this.config.baseUrl}${path}`;
+    const url = new URL(path, this.baseUrl);
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      this.config.timeout
-    );
+    // Add query parameters
+    if (options.params) {
+      Object.entries(options.params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          url.searchParams.append(key, String(value));
+        }
+      });
+    }
 
-    let lastError: Error | undefined;
+    const headers: Record<string, string> = {
+      'X-API-Key': this.apiKey,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    const fetchOptions: RequestInit = {
+      method,
+      headers,
+      signal: AbortSignal.timeout(options.timeout || this.timeout),
+    };
+
+    if (options.body && method !== 'GET') {
+      fetchOptions.body = JSON.stringify(options.body);
+    }
+
+    let lastError: Error | null = null;
     
-    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const response = await fetch(url, {
-          ...options,
-          headers: {
-            'X-API-Key': this.config.apiKey,
-            'Content-Type': 'application/json',
-            'User-Agent': '@stockalert/sdk/1.0.0',
-            ...options.headers,
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        // Handle rate limit headers
-        const rateLimit = {
-          limit: parseInt(response.headers.get('X-RateLimit-Limit') || '0'),
-          remaining: parseInt(response.headers.get('X-RateLimit-Remaining') || '0'),
-          reset: parseInt(response.headers.get('X-RateLimit-Reset') || '0'),
-        };
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          
-          switch (response.status) {
-            case 401:
-              throw new AuthenticationError(errorData.error || 'Invalid API key');
-            case 404:
-              throw new NotFoundError(errorData.error || 'Resource not found');
-            case 429:
-              throw new RateLimitError(
-                errorData.error || 'Rate limit exceeded',
-                rateLimit.limit,
-                rateLimit.remaining,
-                rateLimit.reset
-              );
-            case 400:
-              throw new ValidationError(
-                errorData.error || 'Validation error',
-                errorData.errors
-              );
-            default:
-              throw new StockAlertError(
-                errorData.error || `Request failed with status ${response.status}`,
-                response.status
-              );
-          }
+        if (this.debug) {
+          console.log(`[StockAlert SDK] ${method} ${url.toString()}`);
         }
 
-        return await response.json();
+        const response = await fetch(url.toString(), fetchOptions);
+        const data = await response.json() as ApiResponse<T>;
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            const retryAfter = response.headers.get('Retry-After');
+            throw new RateLimitError(
+              'Rate limit exceeded',
+              retryAfter ? parseInt(retryAfter) : undefined
+            );
+          }
+
+          throw new ApiError(
+            data.error || 'Unknown error',
+            response.status,
+            data
+          );
+        }
+
+        if (!data.success) {
+          throw new ApiError(data.error || 'Request failed', response.status, data);
+        }
+
+        return data.data as T;
       } catch (error) {
-        clearTimeout(timeoutId);
+        lastError = error as Error;
         
-        if (error instanceof StockAlertError) {
+        // Don't retry on client errors (4xx) except rate limits
+        if (error instanceof ApiError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429) {
           throw error;
         }
 
-        if (error instanceof Error) {
-          if (error.name === 'AbortError') {
-            throw new NetworkError('Request timeout', error);
+        // Exponential backoff for retries
+        if (attempt < this.maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+          if (this.debug) {
+            console.log(`[StockAlert SDK] Retrying after ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`);
           }
-          
-          lastError = error;
-          
-          // Retry on network errors
-          if (attempt < this.config.maxRetries) {
-            // Exponential backoff with jitter
-            const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 1000, 10000);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          }
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-        
-        throw new NetworkError('Network request failed', lastError);
       }
     }
-    
-    throw new NetworkError('Max retries exceeded', lastError);
+
+    throw new StockAlertError(
+      `Request failed after ${this.maxRetries} retries: ${lastError?.message || 'Unknown error'}`
+    );
   }
 
-  protected buildQueryString(params: Record<string, any>): string {
-    const filtered = Object.entries(params)
-      .filter(([_, value]) => value !== undefined && value !== null)
-      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-    
-    return filtered.length > 0 ? `?${filtered.join('&')}` : '';
+  protected async get<T>(path: string, options?: RequestOptions): Promise<T> {
+    return this.request<T>('GET', path, options);
+  }
+
+  protected async post<T>(path: string, body?: Record<string, unknown>, options?: RequestOptions): Promise<T> {
+    return this.request<T>('POST', path, { ...options, body });
+  }
+
+  protected async put<T>(path: string, body?: Record<string, unknown>, options?: RequestOptions): Promise<T> {
+    return this.request<T>('PUT', path, { ...options, body });
+  }
+
+  protected async delete<T>(path: string, options?: RequestOptions): Promise<T> {
+    return this.request<T>('DELETE', path, options);
   }
 }

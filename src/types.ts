@@ -1,122 +1,109 @@
-export interface StockAlertConfig {
-  apiKey: string;
-  baseUrl?: string;
-  timeout?: number;
-  maxRetries?: number;
+export interface Alert {
+  id: string;
+  symbol: string;
+  condition: AlertCondition;
+  threshold: number;
+  notification: NotificationChannel;
+  status: AlertStatus;
+  created_at: string;
+  updated_at: string;
+  last_triggered?: string;
+  initial_price?: number;
+  parameters?: AlertParameters;
 }
 
-export type AlertStatus = 'active' | 'paused' | 'triggered';
-export type NotificationChannel = 'email' | 'sms';
-
 export type AlertCondition = 
-  | 'price_above' 
-  | 'price_below' 
-  | 'price_change_up' 
-  | 'price_change_down' 
-  | 'new_high' 
+  | 'price_above'
+  | 'price_below'
+  | 'price_change_up'
+  | 'price_change_down'
+  | 'new_high'
   | 'new_low'
-  | 'reminder'
-  | 'daily_reminder'
   | 'ma_crossover_golden'
   | 'ma_crossover_death'
   | 'ma_touch_above'
   | 'ma_touch_below'
-  | 'volume_change'
   | 'rsi_limit'
+  | 'reminder'
+  | 'daily_reminder'
+  | 'volume_change'
   | 'pe_ratio_below'
-  | 'pe_ratio_above'
-  | 'forward_pe_below'
-  | 'forward_pe_above'
-  | 'earnings_announcement'
-  | 'dividend_ex_date'
-  | 'dividend_payment';
+  | 'pe_ratio_above';
+
+export type NotificationChannel = 'email' | 'sms' | 'whatsapp';
+export type AlertStatus = 'active' | 'paused' | 'triggered';
+
+export interface AlertParameters {
+  ma_period?: number;
+  rsi_period?: number;
+  rsi_threshold?: number;
+  volume_threshold?: number;
+  pe_ratio?: number;
+  reminder_date?: string;
+  reminder_time?: string;
+  [key: string]: string | number | boolean | undefined;
+}
 
 export interface CreateAlertRequest {
   symbol: string;
   condition: AlertCondition;
-  threshold?: number;
-  notification?: NotificationChannel;
-  parameters?: Record<string, any>;
+  threshold: number;
+  notification: NotificationChannel;
+  parameters?: AlertParameters;
 }
 
 export interface UpdateAlertRequest {
   status: 'active' | 'paused';
 }
 
-export interface Alert {
-  id: string;
-  symbol: string;
-  condition: AlertCondition;
-  threshold: number | null;
-  notification: NotificationChannel;
-  status: AlertStatus;
-  created_at: string;
-  initial_price: number;
-  parameters: Record<string, any> | null;
-  stocks?: {
-    name: string;
-    last_price: number;
-  };
-}
-
 export interface ListAlertsParams {
-  page?: number;
-  limit?: number;
   status?: AlertStatus;
   condition?: AlertCondition;
-  search?: string;
-  sortField?: string;
-  sortDirection?: 'asc' | 'desc';
+  symbol?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  created_at: string;
+  last_used?: string;
+  permissions: string[];
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  permissions?: string[];
 }
 
 export interface PaginatedResponse<T> {
-  success: boolean;
   data: T[];
-  pagination: {
-    page: number;
-    limit: number;
+  meta: {
     total: number;
-    totalPages: number;
+    limit: number;
+    offset: number;
   };
 }
 
 export interface ApiResponse<T> {
   success: boolean;
-  data: T;
+  data?: T;
+  error?: string;
 }
 
-export interface ApiError {
-  success: false;
-  error: string;
+export interface StockAlertConfig {
+  apiKey: string;
+  baseUrl?: string;
+  timeout?: number;
+  maxRetries?: number;
+  debug?: boolean;
 }
 
-export interface Webhook {
-  id: string;
-  url: string;
-  events: string[];
-  secret: string;
-  is_active: boolean;
-  created_at: string;
-  last_triggered_at: string | null;
-  failure_count: number;
-}
-
-export interface CreateWebhookRequest {
-  url: string;
-  events: string[];
-}
-
-export interface WebhookPayload {
-  event: string;
-  timestamp: string;
-  data: {
-    alert_id: string;
-    symbol: string;
-    condition: string;
-    threshold: number;
-    current_value: number;
-    triggered_at: string;
-    reason: string;
-    parameters: Record<string, any> | null;
-  };
+export interface RequestOptions {
+  params?: Record<string, string | number | boolean | undefined>;
+  headers?: Record<string, string>;
+  body?: Record<string, unknown>;
+  timeout?: number;
 }
