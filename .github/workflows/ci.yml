@@ -30,9 +30,8 @@ jobs:
       - name: Type check
         run: npm run typecheck
         
-      # Skip tests for now due to crypto issue in older Node versions
-      # - name: Test
-      #   run: npm run test:coverage
+      - name: Test
+        run: npm run test
         
       - name: Build
         run: npm run build
