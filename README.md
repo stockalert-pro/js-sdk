@@ -2,6 +2,11 @@
 
 Official JavaScript/TypeScript SDK for the StockAlert.pro API.
 
+## Requirements
+
+- Node.js 18 or higher
+- npm or yarn
+
 ## Installation
 
 ```bash
@@ -38,7 +43,7 @@ await client.alerts.update(alert.id, {
 });
 
 // Delete alert
-await client.alerts.delete(alert.id);
+await client.alerts.remove(alert.id);
 ```
 
 ## Features

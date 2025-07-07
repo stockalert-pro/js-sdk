@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [16.x, 18.x, 20.x]
+        node-version: [18.x, 20.x]
 
     steps:
       - uses: actions/checkout@v4
@@ -30,17 +30,11 @@ jobs:
       - name: Type check
         run: npm run typecheck
         
+      - name: Test
+        run: npm run test
+        
       - name: Build
         run: npm run build
-        
-      - name: Run Tests
-        run: |
-          if [[ "${{ matrix.node-version }}" == "16.x" ]]; then
-            echo "Running tests with crypto polyfill for Node 16..."
-            NODE_OPTIONS='--no-warnings --experimental-global-webcrypto' npm run test || npm run test
-          else
-            npm run test
-          fi
 
   publish:
     needs: test
