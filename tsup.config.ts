@@ -5,10 +5,9 @@ export default defineConfig({
   format: ['cjs', 'esm'],
   dts: {
     resolve: true,
-    // Only emit d.ts files, no .d.cts
     only: true,
   },
-  sourcemap: false, // Remove sourcemaps from npm package
+  sourcemap: false,
   clean: true,
   minify: true,
   treeshake: true,
@@ -20,8 +19,26 @@ export default defineConfig({
   shims: true,
   esbuildOptions(options) {
     options.drop = ['console', 'debugger'];
-    options.keepNames = false; // Don't keep function names in production
-    options.legalComments = 'none'; // Remove all comments
+    options.keepNames = false;
+    options.legalComments = 'none';
     options.charset = 'utf8';
+  },
+  onSuccess: async () => {
+    // Clean up unnecessary files after build
+    const fs = require('fs').promises;
+    const path = require('path');
+    try {
+      // Remove .d.cts file as we only need .d.ts
+      await fs.unlink(path.join(__dirname, 'dist/index.d.cts'));
+      // Remove any sourcemap files if they exist
+      const files = await fs.readdir(path.join(__dirname, 'dist'));
+      for (const file of files) {
+        if (file.endsWith('.map')) {
+          await fs.unlink(path.join(__dirname, 'dist', file));
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
   },
 });
