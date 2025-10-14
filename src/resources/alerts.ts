@@ -146,7 +146,7 @@ export class AlertsResource extends BaseResource {
 
       // Check if we've reached the end
       if (response.data.length < limit ||
-          (response.meta.totalPages !== undefined && page >= response.meta.totalPages)) {
+          (response.meta.pagination.totalPages !== undefined && page >= response.meta.pagination.totalPages)) {
         break;
       }
 

@@ -157,7 +157,10 @@ export interface CreateApiKeyRequest {
 // Response Types
 export interface PaginatedResponse<T> {
   data: T[];
-  meta: PaginationMeta;
+  meta: {
+    pagination: PaginationMeta;
+    rateLimit: MetaRateLimit;
+  };
 }
 
 export interface PaginationMeta {
@@ -167,9 +170,21 @@ export interface PaginationMeta {
   totalPages: number;
 }
 
+export interface MetaRateLimit {
+  limit: number;
+  remaining: number;
+  reset: number;
+}
+
+export interface ApiResponseMeta {
+  pagination?: PaginationMeta;
+  rateLimit?: MetaRateLimit;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
+  meta?: ApiResponseMeta;
   error?: string;
   error_code?: string;
   request_id?: string;
@@ -242,14 +257,23 @@ export function isPaginatedResponse<T>(
   if (!obj || typeof obj !== 'object') {return false;}
 
   const r = obj as Record<string, unknown>;
+  if (!Array.isArray(r.data) || !r.data.every(itemGuard)) {
+    return false;
+  }
+
+  if (typeof r.meta !== 'object' || r.meta === null) {
+    return false;
+  }
+
+  const meta = r.meta as any;
   return (
-    Array.isArray(r.data) &&
-    r.data.every(itemGuard) &&
-    typeof r.meta === 'object' &&
-    r.meta !== null &&
-    typeof (r.meta as any).page === 'number' &&
-    typeof (r.meta as any).limit === 'number' &&
-    typeof (r.meta as any).total === 'number' &&
-    typeof (r.meta as any).totalPages === 'number'
+    typeof meta.pagination === 'object' &&
+    meta.pagination !== null &&
+    typeof meta.pagination.page === 'number' &&
+    typeof meta.pagination.limit === 'number' &&
+    typeof meta.pagination.total === 'number' &&
+    typeof meta.pagination.totalPages === 'number' &&
+    typeof meta.rateLimit === 'object' &&
+    meta.rateLimit !== null
   );
 }

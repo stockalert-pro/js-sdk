@@ -158,6 +158,13 @@ export abstract class BaseResource {
           );
         }
 
+        // For paginated responses, return the entire envelope (without success flag)
+        // This preserves the meta object with pagination and rate limit info
+        if (data.meta !== undefined) {
+          return { data: data.data, meta: data.meta } as T;
+        }
+
+        // For single-item responses, just return the data
         return data.data;
       } catch (error) {
         clearTimeout(timeoutId);
