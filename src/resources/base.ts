@@ -119,20 +119,17 @@ export abstract class BaseResource {
           );
         }
 
-        // Handle rate limits from headers (v1 API)
-        const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-        if (rateLimitReset) {
-          const resetTime = parseInt(rateLimitReset, 10);
-          this.rateLimitReset.set(url.origin, resetTime);
-        }
-
         // Handle rate limit errors
         if (response.status === 429) {
+          // Only store rate limit reset time when we actually get rate limited
+          const rateLimitReset = response.headers.get('X-RateLimit-Reset');
           const resetTime = rateLimitReset ? parseInt(rateLimitReset, 10) : Date.now() + 60000;
+          this.rateLimitReset.set(url.origin, resetTime);
+
           const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
 
           throw new RateLimitError(
-            data.error ?? 'Rate limit exceeded',
+            this.extractErrorMessage(data.error, 'Rate limit exceeded'),
             retryAfter
           );
         }
@@ -140,11 +137,11 @@ export abstract class BaseResource {
         // Handle errors
         if (!response.ok) {
           if (response.status === 401) {
-            throw new AuthenticationError(data.error ?? 'Authentication failed');
+            throw new AuthenticationError(this.extractErrorMessage(data.error, 'Authentication failed'));
           }
 
           throw new ApiError(
-            data.error ?? `HTTP ${response.status} error`,
+            this.extractErrorMessage(data.error, `HTTP ${response.status} error`),
             response.status,
             data
           );
@@ -152,7 +149,7 @@ export abstract class BaseResource {
 
         if (!data.success || data.data === undefined) {
           throw new ApiError(
-            data.error ?? 'Request failed',
+            this.extractErrorMessage(data.error, 'Request failed'),
             response.status,
             data
           );
@@ -268,5 +265,15 @@ export abstract class BaseResource {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error === 'string') {
+      return error;
+    }
+    if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+    return fallback;
   }
 }
