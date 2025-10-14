@@ -66,16 +66,30 @@ export type AlertConditionConfig =
 
 export interface Alert {
   id: string; // Will be AlertId when fetched through SDK
+  user_id?: string;
+  email?: string;
   symbol: string;
   condition: AlertCondition;
   threshold?: number;
   notification: NotificationChannel;
   status: AlertStatus;
   created_at: string;
-  updated_at: string;
-  last_triggered?: string;
+  triggered_at?: string;
   initial_price?: number;
   parameters?: AlertParameters;
+  verified?: boolean;
+  verification_token?: string;
+  last_evaluated_at?: string;
+  last_metric_value?: number;
+  stock?: {
+    name: string;
+    last_price: number;
+    high_52w?: number;
+    low_52w?: number;
+    rsi?: number;
+    ma_50?: number;
+    ma_200?: number;
+  };
 }
 
 export type AlertCondition = AlertConditionConfig['condition'];
@@ -104,15 +118,23 @@ export interface CreateAlertRequest {
 }
 
 export interface UpdateAlertRequest {
-  status: 'active' | 'paused';
+  condition?: AlertCondition;
+  threshold?: number;
+  notification?: NotificationChannel;
+  parameters?: AlertParameters;
 }
 
 export interface ListAlertsParams {
   status?: AlertStatus;
   condition?: AlertCondition;
   symbol?: string;
+  search?: string;
+  sortField?: string;
+  sortDirection?: 'asc' | 'desc';
+  minimal?: boolean;
+  extended?: boolean;
   limit?: number;
-  offset?: number;
+  page?: number;
 }
 
 // API Key Types
@@ -139,10 +161,10 @@ export interface PaginatedResponse<T> {
 }
 
 export interface PaginationMeta {
-  total: number;
+  page: number;
   limit: number;
-  offset: number;
-  has_more: boolean;
+  total: number;
+  totalPages: number;
 }
 
 export interface ApiResponse<T> {
@@ -154,8 +176,9 @@ export interface ApiResponse<T> {
 }
 
 export interface DeleteResponse {
-  message: string;
-  id: string;
+  alertId?: string;
+  id?: string;
+  status: string;
 }
 
 // Config Types
@@ -190,7 +213,7 @@ export interface ErrorResponse {
 // Type Guards with better implementation
 export function isAlert(obj: unknown): obj is Alert {
   if (!obj || typeof obj !== 'object') {return false;}
-  
+
   const a = obj as Record<string, unknown>;
   return (
     typeof a.id === 'string' &&
@@ -198,8 +221,7 @@ export function isAlert(obj: unknown): obj is Alert {
     typeof a.condition === 'string' &&
     typeof a.notification === 'string' &&
     typeof a.status === 'string' &&
-    typeof a.created_at === 'string' &&
-    typeof a.updated_at === 'string'
+    typeof a.created_at === 'string'
   );
 }
 
@@ -218,15 +240,16 @@ export function isPaginatedResponse<T>(
   itemGuard: (item: unknown) => item is T
 ): obj is PaginatedResponse<T> {
   if (!obj || typeof obj !== 'object') {return false;}
-  
+
   const r = obj as Record<string, unknown>;
   return (
     Array.isArray(r.data) &&
     r.data.every(itemGuard) &&
     typeof r.meta === 'object' &&
     r.meta !== null &&
-    typeof (r.meta as any).total === 'number' &&
+    typeof (r.meta as any).page === 'number' &&
     typeof (r.meta as any).limit === 'number' &&
-    typeof (r.meta as any).offset === 'number'
+    typeof (r.meta as any).total === 'number' &&
+    typeof (r.meta as any).totalPages === 'number'
   );
 }

@@ -29,17 +29,21 @@ app.post('/webhook', (req, res) => {
   switch (payload.event) {
     case 'alert.triggered':
       console.log('🚨 Alert triggered!');
-      console.log(`Stock: ${payload.data.symbol}`);
-      console.log(`Condition: ${payload.data.condition}`);
-      console.log(`Threshold: $${payload.data.threshold}`);
-      console.log(`Current: $${payload.data.current_value}`);
-      console.log(`Reason: ${payload.data.reason}`);
-      
+      console.log(`Alert ID: ${payload.data.alert.id}`);
+      console.log(`Symbol: ${payload.data.alert.symbol}`);
+      console.log(`Condition: ${payload.data.alert.condition}`);
+      console.log(`Threshold: ${payload.data.alert.threshold}`);
+      console.log(`Status: ${payload.data.alert.status}`);
+      console.log(`\nStock Info:`);
+      console.log(`  Price: $${payload.data.stock.price}`);
+      console.log(`  Change: ${payload.data.stock.change}`);
+      console.log(`  Change %: ${payload.data.stock.change_percent}%`);
+
       // Your custom logic here
       // e.g., send notification, execute trade, update database, etc.
-      
+
       break;
-      
+
     default:
       console.log(`Unknown event type: ${payload.event}`);
   }

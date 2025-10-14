@@ -58,14 +58,19 @@ describe('WebhooksResource', () => {
       event: 'alert.triggered',
       timestamp: '2024-01-01T00:00:00Z',
       data: {
-        alert_id: '123',
-        symbol: 'AAPL',
-        condition: 'price_above',
-        threshold: 150,
-        current_value: 155,
-        triggered_at: '2024-01-01T00:00:00Z',
-        reason: 'Price exceeded threshold',
-        parameters: null
+        alert: {
+          id: '123',
+          symbol: 'AAPL',
+          condition: 'price_above',
+          threshold: 150,
+          status: 'triggered'
+        },
+        stock: {
+          symbol: 'AAPL',
+          price: 155,
+          change: 5,
+          change_percent: 3.33
+        }
       }
     };
 
@@ -118,15 +123,13 @@ describe('WebhooksResource', () => {
 
     it('should accept test webhooks', () => {
       const testPayload = {
-        ...validPayload,
-        data: {
-          ...validPayload.data,
-          test: true
-        }
+        ...validPayload
       };
-      
+
       const parsed = webhooks.parse(testPayload);
-      expect(parsed.data.test).toBe(true);
+      expect(parsed.event).toBe('alert.triggered');
+      expect(parsed.data.alert.id).toBe('123');
+      expect(parsed.data.stock.symbol).toBe('AAPL');
     });
   });
 });

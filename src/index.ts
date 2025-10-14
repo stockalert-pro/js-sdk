@@ -10,7 +10,14 @@ export * from './errors';
 // Resource exports (for advanced usage)
 export { AlertsResource } from './resources/alerts';
 export { ApiKeysResource } from './resources/api-keys';
-export { WebhooksResource, type WebhookPayload } from './resources/webhooks';
+export {
+  WebhooksResource,
+  type Webhook,
+  type CreateWebhookRequest,
+  type WebhookTestRequest,
+  type WebhookTestResponse,
+  type WebhookPayload
+} from './resources/webhooks';
 
 // Utility exports
 export { detectEnvironment, checkBrowserSecurity, type Environment } from './utils/environment';

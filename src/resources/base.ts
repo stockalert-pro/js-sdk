@@ -119,18 +119,21 @@ export abstract class BaseResource {
           );
         }
 
-        // Handle rate limits
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          const resetTime = retryAfter ? 
-            (parseInt(retryAfter, 10) * 1000) + Date.now() : 
-            Date.now() + 60000;
-          
+        // Handle rate limits from headers (v1 API)
+        const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+        if (rateLimitReset) {
+          const resetTime = parseInt(rateLimitReset, 10);
           this.rateLimitReset.set(url.origin, resetTime);
-          
+        }
+
+        // Handle rate limit errors
+        if (response.status === 429) {
+          const resetTime = rateLimitReset ? parseInt(rateLimitReset, 10) : Date.now() + 60000;
+          const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+
           throw new RateLimitError(
             data.error ?? 'Rate limit exceeded',
-            retryAfter ? parseInt(retryAfter, 10) : 60
+            retryAfter
           );
         }
 
