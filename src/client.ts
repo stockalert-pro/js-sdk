@@ -5,7 +5,7 @@ import { ValidationError } from './errors';
 import { checkBrowserSecurity, detectEnvironment } from './utils/environment';
 import type { StockAlertConfig } from './types';
 
-const DEFAULT_BASE_URL = 'https://stockalert.pro/api/public/v1';
+const DEFAULT_BASE_URL = 'https://stockalert.pro/api/v1';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 

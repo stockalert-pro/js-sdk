@@ -51,7 +51,7 @@ describe('StockAlert Client', () => {
       });
       
       const config = client.getConfig();
-      expect(config.baseUrl).toBe('https://stockalert.pro/api/public/v1');
+      expect(config.baseUrl).toBe('https://stockalert.pro/api/v1');
       expect(config.timeout).toBe(30000);
       expect(config.maxRetries).toBe(3);
       expect(config.debug).toBe(false);
