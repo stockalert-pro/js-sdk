@@ -236,11 +236,16 @@ export abstract class BaseResource {
   }
 
   private buildUrl(
-    path: string, 
+    path: string,
     params?: Record<string, string | number | boolean | undefined>
   ): URL {
-    const url = new URL(path, this.config.baseUrl);
-    
+    // Remove leading slash from path if present
+    const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+
+    // Append path to baseUrl with proper separator
+    const fullUrl = `${this.config.baseUrl}/${normalizedPath}`;
+    const url = new URL(fullUrl);
+
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
