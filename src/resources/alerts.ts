@@ -17,7 +17,7 @@ export class AlertsResource extends BaseResource {
    */
   list(params?: ListAlertsParams): Promise<PaginatedResponse<Alert>> {
     const sanitizedParams = params ? this.sanitizeListParams(params) : undefined;
-    return this.get<PaginatedResponse<Alert>>('/alerts', { params: sanitizedParams });
+    return this.get<PaginatedResponse<Alert>>('/api/v1/alerts', { params: sanitizedParams });
   }
 
   /**
@@ -29,7 +29,7 @@ export class AlertsResource extends BaseResource {
   create(data: CreateAlertRequest): Promise<Alert> {
     this.validateCreateRequest(data);
     // Proper solution: convert to Record without type assertion
-    return this.post<Alert>('/alerts', this.toRecord(data));
+    return this.post<Alert>('/api/v1/alerts', this.toRecord(data));
   }
 
   /**
@@ -40,7 +40,7 @@ export class AlertsResource extends BaseResource {
    */
   retrieve(id: string): Promise<Alert> {
     this.validateId(id, 'Alert');
-    return this.get<Alert>(`/alerts/${encodeURIComponent(id)}`);
+    return this.get<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -53,7 +53,7 @@ export class AlertsResource extends BaseResource {
   update(id: string, data: UpdateAlertRequest): Promise<Alert> {
     this.validateId(id, 'Alert');
     this.validateUpdateRequest(data);
-    return this.put<Alert>(`/alerts/${encodeURIComponent(id)}`, this.toRecord(data));
+    return this.put<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}`, this.toRecord(data));
   }
 
   /**
@@ -64,7 +64,61 @@ export class AlertsResource extends BaseResource {
    */
   remove(id: string): Promise<DeleteResponse> {
     this.validateId(id, 'Alert');
-    return this.delete<DeleteResponse>(`/alerts/${encodeURIComponent(id)}`);
+    return this.delete<DeleteResponse>(`/api/v1/alerts/${encodeURIComponent(id)}`);
+  }
+
+  /**
+   * Pause an alert
+   * @param id - Alert ID
+   * @returns Updated alert
+   * @throws {ValidationError} If ID is invalid
+   */
+  pause(id: string): Promise<Alert> {
+    this.validateId(id, 'Alert');
+    return this.post<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}/pause`);
+  }
+
+  /**
+   * Activate (reactivate) an alert
+   * @param id - Alert ID
+   * @returns Updated alert
+   * @throws {ValidationError} If ID is invalid
+   */
+  activate(id: string): Promise<Alert> {
+    this.validateId(id, 'Alert');
+    return this.post<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}/activate`);
+  }
+
+  /**
+   * Get alert history
+   * @param id - Alert ID
+   * @param params - Optional pagination parameters
+   * @returns Paginated alert history
+   * @throws {ValidationError} If ID is invalid
+   */
+  history(id: string, params?: { page?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+    this.validateId(id, 'Alert');
+    return this.get<PaginatedResponse<any>>(`/api/v1/alerts/${encodeURIComponent(id)}/history`, { params });
+  }
+
+  /**
+   * Get alert statistics
+   * @returns Alert statistics including status counts
+   */
+  stats(): Promise<{ statusCounts: Record<string, number>; total: number }> {
+    return this.get<{ statusCounts: Record<string, number>; total: number }>('/api/v1/alerts/stats');
+  }
+
+  /**
+   * Verify an alert via token (for guest alerts)
+   * @param token - Verification token
+   * @returns Verified alert
+   */
+  verify(token: string): Promise<Alert> {
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+      throw new ValidationError('Verification token is required');
+    }
+    return this.post<Alert>('/api/v1/alerts/verify', { token });
   }
 
   /**
@@ -73,30 +127,30 @@ export class AlertsResource extends BaseResource {
    * @yields Individual alerts
    */
   async *iterate(params?: ListAlertsParams): AsyncGenerator<Alert, void, undefined> {
-    let offset = 0;
+    let page = 1;
     const limit = Math.min(params?.limit ?? 100, 100); // Cap at 100 for performance
     const baseParams = params ? { ...params } : {};
     delete baseParams.limit;
-    delete baseParams.offset;
-    
+    delete baseParams.page;
+
     while (true) {
-      const response = await this.list({ 
-        ...baseParams, 
-        limit, 
-        offset 
+      const response = await this.list({
+        ...baseParams,
+        limit,
+        page
       });
-      
+
       for (const alert of response.data) {
         yield alert;
       }
-      
+
       // Check if we've reached the end
-      if (response.data.length < limit || 
-          (response.meta.total !== undefined && offset + response.data.length >= response.meta.total)) {
+      if (response.data.length < limit ||
+          (response.meta.pagination.totalPages !== undefined && page >= response.meta.pagination.totalPages)) {
         break;
       }
-      
-      offset += response.data.length; // Use actual count, not limit
+
+      page++;
     }
   }
 
@@ -161,12 +215,11 @@ export class AlertsResource extends BaseResource {
       'price_above', 'price_below', 'price_change_up', 'price_change_down',
       'new_high', 'new_low', 'ma_touch_above', 'ma_touch_below',
       'volume_change', 'rsi_limit', 'pe_ratio_below', 'pe_ratio_above',
-      'forward_pe_below', 'forward_pe_above'
+      'forward_pe_below', 'forward_pe_above', 'earnings_announcement', 'dividend_ex_date'
     ];
 
     const noThreshold = [
-      'ma_crossover_golden', 'ma_crossover_death', 'reminder', 'daily_reminder',
-      'earnings_announcement', 'dividend_ex_date', 'dividend_payment'
+      'ma_crossover_golden', 'ma_crossover_death', 'reminder', 'daily_reminder', 'dividend_payment'
     ];
 
     if (requiresThreshold.includes(data.condition)) {
@@ -220,8 +273,32 @@ export class AlertsResource extends BaseResource {
   }
 
   private validateUpdateRequest(data: UpdateAlertRequest): void {
-    if (!data.status || !['active', 'paused'].includes(data.status)) {
-      throw new ValidationError('Status must be either "active" or "paused"');
+    // At least one field must be provided
+    const hasField = data.condition !== undefined ||
+                     data.threshold !== undefined ||
+                     data.notification !== undefined ||
+                     data.parameters !== undefined;
+
+    if (!hasField) {
+      throw new ValidationError('At least one field must be provided for update');
+    }
+
+    // Validate notification channel if provided
+    if (data.notification !== undefined) {
+      const validChannels = ['email', 'sms'];
+      if (!validChannels.includes(data.notification)) {
+        throw new ValidationError(`Notification must be one of: ${validChannels.join(', ')}`);
+      }
+    }
+
+    // Validate condition if provided
+    if (data.condition !== undefined && typeof data.condition !== 'string') {
+      throw new ValidationError('Condition must be a string');
+    }
+
+    // Validate threshold if provided
+    if (data.threshold !== undefined && (typeof data.threshold !== 'number' || isNaN(data.threshold) || !isFinite(data.threshold))) {
+      throw new ValidationError('Threshold must be a valid number');
     }
   }
 
@@ -241,7 +318,7 @@ export class AlertsResource extends BaseResource {
     params: ListAlertsParams
   ): Record<string, string | number | boolean | undefined> {
     const sanitized: Record<string, string | number | boolean | undefined> = {};
-    
+
     if (params.status !== undefined) {
       sanitized['status'] = params.status;
     }
@@ -251,13 +328,28 @@ export class AlertsResource extends BaseResource {
     if (params.symbol !== undefined) {
       sanitized['symbol'] = params.symbol.toUpperCase();
     }
+    if (params.search !== undefined) {
+      sanitized['search'] = params.search;
+    }
+    if (params.sortField !== undefined) {
+      sanitized['sortField'] = params.sortField;
+    }
+    if (params.sortDirection !== undefined) {
+      sanitized['sortDirection'] = params.sortDirection;
+    }
+    if (params.minimal !== undefined) {
+      sanitized['minimal'] = params.minimal;
+    }
+    if (params.extended !== undefined) {
+      sanitized['extended'] = params.extended;
+    }
     if (typeof params.limit === 'number' && params.limit > 0 && params.limit <= 100) {
       sanitized['limit'] = Math.floor(params.limit);
     }
-    if (typeof params.offset === 'number' && params.offset >= 0) {
-      sanitized['offset'] = Math.floor(params.offset);
+    if (typeof params.page === 'number' && params.page >= 1) {
+      sanitized['page'] = Math.floor(params.page);
     }
-    
+
     return sanitized;
   }
 

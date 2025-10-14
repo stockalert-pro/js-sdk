@@ -119,29 +119,29 @@ export abstract class BaseResource {
           );
         }
 
-        // Handle rate limits
+        // Handle rate limit errors
         if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          const resetTime = retryAfter ? 
-            (parseInt(retryAfter, 10) * 1000) + Date.now() : 
-            Date.now() + 60000;
-          
+          // Only store rate limit reset time when we actually get rate limited
+          const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+          const resetTime = rateLimitReset ? parseInt(rateLimitReset, 10) : Date.now() + 60000;
           this.rateLimitReset.set(url.origin, resetTime);
-          
+
+          const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+
           throw new RateLimitError(
-            data.error ?? 'Rate limit exceeded',
-            retryAfter ? parseInt(retryAfter, 10) : 60
+            this.extractErrorMessage(data.error, 'Rate limit exceeded'),
+            retryAfter
           );
         }
 
         // Handle errors
         if (!response.ok) {
           if (response.status === 401) {
-            throw new AuthenticationError(data.error ?? 'Authentication failed');
+            throw new AuthenticationError(this.extractErrorMessage(data.error, 'Authentication failed'));
           }
 
           throw new ApiError(
-            data.error ?? `HTTP ${response.status} error`,
+            this.extractErrorMessage(data.error, `HTTP ${response.status} error`),
             response.status,
             data
           );
@@ -149,12 +149,19 @@ export abstract class BaseResource {
 
         if (!data.success || data.data === undefined) {
           throw new ApiError(
-            data.error ?? 'Request failed',
+            this.extractErrorMessage(data.error, 'Request failed'),
             response.status,
             data
           );
         }
 
+        // For paginated responses, return the entire envelope (without success flag)
+        // This preserves the meta object with pagination and rate limit info
+        if (data.meta !== undefined) {
+          return { data: data.data, meta: data.meta } as T;
+        }
+
+        // For single-item responses, just return the data
         return data.data;
       } catch (error) {
         clearTimeout(timeoutId);
@@ -258,5 +265,15 @@ export abstract class BaseResource {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error === 'string') {
+      return error;
+    }
+    if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+    return fallback;
   }
 }
