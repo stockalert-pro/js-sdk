@@ -34,8 +34,7 @@
     "analyze": "size-limit --why",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build && cp README-npm.md README.md",
     "postpublish": "git checkout README.md",
-    "prepare": "npm run build && husky install",
-    "postinstall": "husky install"
+    "prepare": "husky || true"
   },
   "keywords": [
     "stockalert",
