@@ -11,8 +11,9 @@ import { StockAlert } from '../src/client';
 import type { Alert, CreateAlertRequest, Webhook } from '../src/types';
 import { ValidationError, AuthenticationError, ApiError, NetworkError } from '../src/errors';
 
-const API_KEY = 'sk_5fbfefc2db6bc2611ab5fb2e193a77c455c7bb0e8a2184b998f18c1bfda3bb61';
-const INTEGRATION_ENABLED = process.env.INTEGRATION === 'true' || true; // Always run
+// Use API key from environment only. Do not run integration tests by default.
+const API_KEY = process.env.STOCKALERT_API_KEY || process.env.API_KEY || '';
+const INTEGRATION_ENABLED = process.env.INTEGRATION === 'true' && /^sk_/.test(API_KEY);
 
 // Skip all tests if integration testing is disabled
 const describeIntegration = INTEGRATION_ENABLED ? describe : describe.skip;
