@@ -51,10 +51,10 @@ npm run build     # Build the package
 
 ## 🚀 Release Process
 
-1. Update version in package.json
-2. Create a git tag
-3. Push to GitHub
-4. GitHub Actions will automatically publish to npm
+1. Update the version in `package.json`
+2. Create a GitHub Release with a tag (e.g. `v2.1.1`) at https://github.com/stockalert-pro/js-sdk/releases
+3. When the release is published, GitHub Actions will build and publish the package to npm
+   - Note: Publishing no longer occurs on push to `main`. Only a published GitHub Release triggers npm publish.
 
 ## 💡 Tips
 
