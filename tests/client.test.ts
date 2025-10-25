@@ -58,7 +58,7 @@ describe('StockAlert Client', () => {
       expect(config.timeout).toBe(30000);
       expect(config.maxRetries).toBe(3);
       expect(config.debug).toBe(false);
-      expect(config.userAgent).toBe('@stockalert/sdk/2.0.1');
+      expect(config.userAgent).toBe('@stockalert/sdk/2.1.1');
     });
 
     it('should accept custom configuration', () => {
