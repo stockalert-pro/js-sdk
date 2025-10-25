@@ -13,6 +13,9 @@ describe('StockAlert Client', () => {
       expect(client.alerts).toBeDefined();
       expect(client.webhooks).toBeDefined();
       expect(client.apiKeys).toBeDefined();
+      expect(client.watchlist).toBeDefined();
+      expect(client.stocks).toBeDefined();
+      expect(client.user).toBeDefined();
     });
 
     it('should throw error for missing API key', () => {
@@ -55,6 +58,7 @@ describe('StockAlert Client', () => {
       expect(config.timeout).toBe(30000);
       expect(config.maxRetries).toBe(3);
       expect(config.debug).toBe(false);
+      expect(config.userAgent).toBe('@stockalert/sdk/2.0.1');
     });
 
     it('should accept custom configuration', () => {
@@ -63,7 +67,8 @@ describe('StockAlert Client', () => {
         baseUrl: 'https://api.example.com/v2',
         timeout: 60000,
         maxRetries: 5,
-        debug: true
+        debug: true,
+        userAgent: '@custom/sdk/1.0.0'
       });
       
       const config = client.getConfig();
@@ -71,6 +76,7 @@ describe('StockAlert Client', () => {
       expect(config.timeout).toBe(60000);
       expect(config.maxRetries).toBe(5);
       expect(config.debug).toBe(true);
+      expect(config.userAgent).toBe('@custom/sdk/1.0.0');
     });
 
     it('should normalize base URL by removing trailing slash', () => {

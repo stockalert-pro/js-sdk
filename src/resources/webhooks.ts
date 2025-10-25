@@ -1,14 +1,19 @@
 import * as crypto from 'crypto';
 import { BaseResource } from './base';
 import { ValidationError } from '../errors';
-import type { DeleteResponse } from '../types';
+import type {
+  ListResponse,
+  ResourceResponse,
+  WebhookEvent,
+  WebhookEventName,
+  WebhookEventType,
+} from '../types';
 
 export interface Webhook {
   id: string;
   user_id: string;
   url: string;
-  events: string[];
-  secret?: string; // Only returned on create
+  events: WebhookEventType[];
   is_active: boolean;
   created_at: string;
   last_triggered_at?: string;
@@ -16,9 +21,14 @@ export interface Webhook {
   metadata?: Record<string, unknown>;
 }
 
+export interface WebhookCreated extends Webhook {
+  secret: string;
+}
+
 export interface CreateWebhookRequest {
   url: string;
-  events?: string[];
+  events: WebhookEventType[];
+  secret?: string;
 }
 
 export interface WebhookTestRequest {
@@ -28,37 +38,28 @@ export interface WebhookTestRequest {
 
 export interface WebhookTestResponse {
   status: number;
-  statusText: string;
+  status_text: string;
   response: string;
 }
 
-export interface WebhookPayload {
-  event: string;
-  timestamp: string;
-  data: {
-    alert: {
-      id: string;
-      symbol: string;
-      condition: string;
-      threshold?: number;
-      status: string;
-    };
-    stock: {
-      symbol: string;
-      price: number;
-      change?: number;
-      change_percent?: number;
-    };
-  };
-}
+export type { WebhookEvent, WebhookPayload } from '../types';
+
+const SUBSCRIBABLE_WEBHOOK_EVENTS: ReadonlyArray<WebhookEventType> = ['alert.triggered'];
+const KNOWN_WEBHOOK_EVENT_NAMES: ReadonlyArray<WebhookEventName> = [
+  'alert.triggered',
+  'alert.paused',
+  'alert.activated',
+  'alert.deleted',
+  'alert.created',
+];
 
 export class WebhooksResource extends BaseResource {
   /**
    * List all webhooks
    * @returns List of webhooks
    */
-  list(): Promise<Webhook[]> {
-    return this.get<Webhook[]>('/api/v1/webhooks');
+  list(): Promise<ListResponse<Webhook>> {
+    return this.get<ListResponse<Webhook>>('/webhooks');
   }
 
   /**
@@ -67,9 +68,18 @@ export class WebhooksResource extends BaseResource {
    * @returns Created webhook (includes secret)
    * @throws {ValidationError} If input validation fails
    */
-  create(data: CreateWebhookRequest): Promise<Webhook> {
+  create(data: CreateWebhookRequest): Promise<WebhookCreated> {
     this.validateCreateRequest(data);
-    return this.post<Webhook>('/api/v1/webhooks', this.toRecord(data));
+    const sanitizedEvents = Array.from(new Set(data.events));
+    return this.unwrap(
+      this.post<ResourceResponse<WebhookCreated>>(
+        '/webhooks',
+        this.toRecord({
+          ...data,
+          events: sanitizedEvents,
+        })
+      )
+    );
   }
 
   /**
@@ -80,7 +90,9 @@ export class WebhooksResource extends BaseResource {
    */
   retrieve(id: string): Promise<Webhook> {
     this.validateId(id, 'Webhook');
-    return this.get<Webhook>(`/api/v1/webhooks/${encodeURIComponent(id)}`);
+    return this.unwrap(
+      this.get<ResourceResponse<Webhook>>(`/webhooks/${encodeURIComponent(id)}`)
+    );
   }
 
   /**
@@ -89,9 +101,13 @@ export class WebhooksResource extends BaseResource {
    * @returns Deletion confirmation
    * @throws {ValidationError} If ID is invalid
    */
-  remove(id: string): Promise<DeleteResponse> {
+  remove(id: string): Promise<{ id: string }> {
     this.validateId(id, 'Webhook');
-    return this.delete<DeleteResponse>(`/api/v1/webhooks/${encodeURIComponent(id)}`);
+    return this.unwrap(
+      this.delete<ResourceResponse<{ id: string }>>(
+        `/webhooks/${encodeURIComponent(id)}`
+      )
+    );
   }
 
   /**
@@ -106,31 +122,68 @@ export class WebhooksResource extends BaseResource {
     if (!data.secret || typeof data.secret !== 'string') {
       throw new ValidationError('Webhook secret is required');
     }
-    return this.post<WebhookTestResponse>('/api/v1/webhooks/test', this.toRecord(data));
+    return this.unwrap(
+      this.post<ResourceResponse<WebhookTestResponse>>(
+        '/webhooks/test',
+        this.toRecord(data)
+      )
+    );
   }
 
   /**
-   * Verify webhook signature using HMAC-SHA256
+   * Verify webhook signature using HMAC-SHA256.
    *
-   * @param payload - The raw webhook payload (as string)
-   * @param signature - The signature from X-StockAlert-Signature header
-   * @param secret - Your webhook secret
-   * @returns true if signature is valid, false otherwise
+   * @param payload - Raw webhook payload; pass the exact body received.
+   * @param signature - Signature string from the X-StockAlert-Signature header.
+   * @param secret - Your webhook secret.
+   * @param timestamp - Optional timestamp from the X-StockAlert-Timestamp header.
+   * @returns true if signature is valid, false otherwise.
    */
-  verifySignature(payload: string, signature: string, secret: string): boolean {
-    if (payload.length === 0 || signature.length === 0 || secret.length === 0) {
+  verifySignature(
+    payload: string | Buffer,
+    signature: string,
+    secret: string,
+    timestamp?: number | string
+  ): boolean {
+    if (!payload || signature.length === 0 || secret.length === 0) {
       return false;
     }
 
     try {
+      const body =
+        typeof payload === 'string' ? payload : payload.toString('utf8');
+      const normalizedSignature = signature.startsWith('sha256=')
+        ? signature.slice('sha256='.length)
+        : signature;
+
+      if (normalizedSignature.length === 0) {
+        return false;
+      }
+
+      const normalizedTimestamp =
+        timestamp === undefined || timestamp === null || `${timestamp}` === ''
+          ? null
+          : `${timestamp}`;
+      const signingPayload =
+        normalizedTimestamp !== null
+          ? `${normalizedTimestamp}.${body}`
+          : body;
+
       const expectedSignature = crypto
         .createHmac('sha256', secret)
-        .update(payload, 'utf8')
+        .update(signingPayload, 'utf8')
         .digest('hex');
 
+      const provided = Buffer.from(normalizedSignature, 'hex');
+      const expected = Buffer.from(expectedSignature, 'hex');
+
+      if (provided.length !== expected.length) {
+        return false;
+      }
+
       return crypto.timingSafeEqual(
-        Buffer.from(signature, 'hex'),
-        Buffer.from(expectedSignature, 'hex')
+        provided,
+        expected
       );
     } catch {
       return false;
@@ -144,20 +197,22 @@ export class WebhooksResource extends BaseResource {
    * @returns Parsed and validated webhook payload
    * @throws ValidationError if payload is invalid
    */
-  parse(payload: string | object): WebhookPayload {
-    let parsed: unknown;
+  parse(payload: string | Buffer | object): WebhookEvent {
+    let parsed: unknown = payload;
 
-    if (typeof payload === 'string') {
+    if (Buffer.isBuffer(parsed)) {
+      parsed = parsed.toString('utf8');
+    }
+
+    if (typeof parsed === 'string') {
       try {
-        parsed = JSON.parse(payload);
+        parsed = JSON.parse(parsed);
       } catch {
         throw new ValidationError('Invalid JSON payload');
       }
-    } else {
-      parsed = payload;
     }
 
-    if (!this.isValidWebhookPayload(parsed)) {
+    if (!this.isValidWebhookEvent(parsed)) {
       throw new ValidationError('Invalid webhook payload structure');
     }
 
@@ -182,16 +237,14 @@ export class WebhooksResource extends BaseResource {
       throw new ValidationError('Invalid webhook URL format');
     }
 
-    // Validate events if provided
-    if (data.events !== undefined) {
-      if (!Array.isArray(data.events)) {
-        throw new ValidationError('Events must be an array');
-      }
-      const validEvents = ['alert.triggered'];
-      const invalidEvents = data.events.filter(e => !validEvents.includes(e));
-      if (invalidEvents.length > 0) {
-        throw new ValidationError(`Invalid events: ${invalidEvents.join(', ')}`);
-      }
+    if (!Array.isArray(data.events) || data.events.length === 0) {
+      throw new ValidationError('Events must include at least one value');
+    }
+    const invalidEvents = data.events.filter(
+      event => !SUBSCRIBABLE_WEBHOOK_EVENTS.includes(event)
+    );
+    if (invalidEvents.length > 0) {
+      throw new ValidationError(`Invalid events: ${invalidEvents.join(', ')}`);
     }
   }
 
@@ -207,16 +260,26 @@ export class WebhooksResource extends BaseResource {
     }
   }
 
-  private isValidWebhookPayload(payload: unknown): payload is WebhookPayload {
+  private isValidWebhookEvent(payload: unknown): payload is WebhookEvent {
     if (typeof payload !== 'object' || payload === null) {
       return false;
     }
 
     const p = payload as Record<string, unknown>;
 
-    if (typeof p['event'] !== 'string' || typeof p['timestamp'] !== 'string') {
+    if (typeof p['id'] !== 'string' || typeof p['event'] !== 'string') {
       return false;
     }
+
+    if (!KNOWN_WEBHOOK_EVENT_NAMES.includes(p['event'] as WebhookEventName)) {
+      return false;
+    }
+
+    const normalizedTimestamp = this.normalizeTimestamp(p['timestamp']);
+    if (normalizedTimestamp === null) {
+      return false;
+    }
+    p['timestamp'] = normalizedTimestamp;
 
     if (typeof p['data'] !== 'object' || p['data'] === null) {
       return false;
@@ -224,9 +287,55 @@ export class WebhooksResource extends BaseResource {
 
     const data = p['data'] as Record<string, unknown>;
 
-    return (
-      typeof data['alert'] === 'object' && data['alert'] !== null &&
-      typeof data['stock'] === 'object' && data['stock'] !== null
-    );
+    if (typeof data['alert_id'] !== 'string' || typeof data['symbol'] !== 'string') {
+      return false;
+    }
+
+    if (typeof data['condition'] !== 'string' || typeof data['notification'] !== 'string') {
+      return false;
+    }
+
+    if (typeof data['status'] !== 'string') {
+      return false;
+    }
+
+    if (
+      data['threshold'] !== undefined &&
+      data['threshold'] !== null &&
+      typeof data['threshold'] !== 'number'
+    ) {
+      return false;
+    }
+
+    if (
+      data['triggered_at'] !== undefined &&
+      data['triggered_at'] !== null &&
+      typeof data['triggered_at'] !== 'string'
+    ) {
+      return false;
+    }
+
+    if (
+      data['price'] !== undefined &&
+      data['price'] !== null &&
+      typeof data['price'] !== 'number'
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private normalizeTimestamp(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
   }
 }

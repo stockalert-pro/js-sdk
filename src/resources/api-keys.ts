@@ -1,46 +1,64 @@
 import { BaseResource } from './base';
 import { ValidationError } from '../errors';
 import type {
-  ApiKey,
+  ApiKeySummary,
+  ApiKeyCreated,
+  ApiKeyDeleteData,
   CreateApiKeyRequest,
-  PaginatedResponse,
-  DeleteResponse,
+  ListResponse,
+  ResourceResponse,
 } from '../types';
 
 export class ApiKeysResource extends BaseResource {
   /**
    * List all API keys
    */
-  list(): Promise<PaginatedResponse<ApiKey>> {
-    return this.get<PaginatedResponse<ApiKey>>('/api-keys');
+  list(): Promise<ListResponse<ApiKeySummary>> {
+    return this.get<ListResponse<ApiKeySummary>>('/api-keys', {
+      headers: this.requireBearerHeaders(),
+    });
   }
 
   /**
    * Create a new API key
    */
-  create(data: CreateApiKeyRequest): Promise<ApiKey> {
+  create(data: CreateApiKeyRequest): Promise<ApiKeyCreated> {
     this.validateCreateRequest(data);
-    // Type assertion needed due to TypeScript limitations with index signatures
-    return this.post<ApiKey>('/api-keys', data as unknown as Record<string, unknown>);
+    return this.unwrap(
+      this.post<ResourceResponse<ApiKeyCreated>>(
+        '/api-keys',
+        this.toRecord(data),
+        { headers: this.requireBearerHeaders() }
+      )
+    );
   }
 
   /**
    * Delete an API key
    */
-  remove(id: string): Promise<DeleteResponse> {
+  remove(id: string): Promise<ApiKeyDeleteData> {
     if (!id || id.trim() === '') {
       throw new ValidationError('API key ID is required');
     }
-    return this.delete<DeleteResponse>(`/api-keys/${encodeURIComponent(id)}`);
+    return this.unwrap(
+      this.delete<ResourceResponse<ApiKeyDeleteData>>(
+        `/api-keys/${encodeURIComponent(id)}`,
+        { headers: this.requireBearerHeaders() }
+      )
+    );
   }
 
   private validateCreateRequest(data: CreateApiKeyRequest): void {
     if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
       throw new ValidationError('API key name is required and must be a non-empty string');
     }
-    
-    if (data.permissions !== undefined && !Array.isArray(data.permissions)) {
-      throw new ValidationError('Permissions must be an array');
+  }
+
+  private requireBearerHeaders(): Record<string, string> {
+    const bearer = this.config.bearerToken;
+    if (!bearer) {
+      throw new ValidationError('API keys endpoints require Bearer token (Authorization header)');
     }
+    return { Authorization: `Bearer ${bearer}` };
   }
 }

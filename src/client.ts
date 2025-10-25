@@ -1,6 +1,9 @@
 import { AlertsResource } from './resources/alerts';
 import { WebhooksResource } from './resources/webhooks';
 import { ApiKeysResource } from './resources/api-keys';
+import { WatchlistResource } from './resources/watchlist';
+import { StocksResource } from './resources/stocks';
+import { UserResource } from './resources/user';
 import { ValidationError } from './errors';
 import { checkBrowserSecurity, detectEnvironment } from './utils/environment';
 import type { StockAlertConfig } from './types';
@@ -8,6 +11,10 @@ import type { StockAlertConfig } from './types';
 const DEFAULT_BASE_URL = 'https://stockalert.pro/api/v1';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
+
+type InternalConfig = Required<Omit<StockAlertConfig, 'bearerToken'>> & {
+  bearerToken?: string;
+};
 
 export interface StockAlertEvents {
   'request:start': (event: { method: string; path: string }) => void;
@@ -20,8 +27,11 @@ export class StockAlert {
   public readonly alerts: AlertsResource;
   public readonly webhooks: WebhooksResource;
   public readonly apiKeys: ApiKeysResource;
+  public readonly watchlist: WatchlistResource;
+  public readonly stocks: StocksResource;
+  public readonly user: UserResource;
   
-  private readonly config: Required<StockAlertConfig>;
+  private readonly config: InternalConfig;
   private readonly environment = detectEnvironment();
   private readonly eventHandlers = new Map<keyof StockAlertEvents, Set<Function>>();
 
@@ -43,7 +53,8 @@ export class StockAlert {
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
       debug: config.debug ?? false,
-      userAgent: config.userAgent ?? '@stockalert/sdk/1.0.0',
+      userAgent: config.userAgent ?? '@stockalert/sdk/2.0.1',
+      bearerToken: config.bearerToken,
     };
 
     const resourceConfig = {
@@ -52,11 +63,16 @@ export class StockAlert {
       timeout: this.config.timeout,
       maxRetries: this.config.maxRetries,
       debug: this.config.debug,
+      userAgent: this.config.userAgent,
+      bearerToken: this.config.bearerToken,
     };
 
     this.alerts = new AlertsResource(resourceConfig);
     this.webhooks = new WebhooksResource(resourceConfig);
     this.apiKeys = new ApiKeysResource(resourceConfig);
+    this.watchlist = new WatchlistResource(resourceConfig);
+    this.stocks = new StocksResource(resourceConfig);
+    this.user = new UserResource(resourceConfig);
 
     if (this.config.debug) {
       console.warn('[StockAlert SDK] Initialized in debug mode', {
@@ -69,7 +85,7 @@ export class StockAlert {
   /**
    * Get current configuration (with API key masked)
    */
-  getConfig(): Readonly<Required<StockAlertConfig>> {
+  getConfig(): Readonly<InternalConfig> {
     return { 
       ...this.config,
       apiKey: this.maskApiKey(this.config.apiKey)

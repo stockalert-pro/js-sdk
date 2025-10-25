@@ -108,13 +108,14 @@ for await (const alert of client.alerts.iterate()) {
 ```typescript
 // Verify webhook signatures
 const isValid = client.webhooks.verifySignature(
-  payload,
-  signature,
-  webhookSecret
+  rawBody,              // Buffer or string
+  signatureHeader,      // e.g. "sha256=<hex>"
+  webhookSecret,
+  timestampHeader       // X-StockAlert-Timestamp header value
 );
 
 if (isValid) {
-  const event = client.webhooks.parse(payload);
+  const event = client.webhooks.parse(rawBody);
   console.log('Received event:', event.event);
 }
 ```

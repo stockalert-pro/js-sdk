@@ -1,21 +1,32 @@
 import express from 'express';
 import { WebhooksResource } from '@stockalert/sdk';
-import type { WebhookPayload } from '@stockalert/sdk';
+import type { WebhookEvent } from '@stockalert/sdk';
 
 const app = express();
+
+const webhookUtils = new WebhooksResource({
+  apiKey: 'sk_placeholder',
+  baseUrl: 'https://stockalert.pro/api/v1',
+  timeout: 5000,
+  maxRetries: 0,
+  debug: false,
+  userAgent: '@stockalert/sdk/webhook-handler'
+} as any);
 
 // Use raw body for signature verification
 app.use(express.raw({ type: 'application/json' }));
 
 app.post('/webhook', (req, res) => {
   const signature = req.headers['x-stockalert-signature'] as string;
+  const timestamp = req.headers['x-stockalert-timestamp'] as string;
   const secret = process.env.WEBHOOK_SECRET!;
   
   // Verify signature
-  const isValid = WebhooksResource.verifySignature(
+  const isValid = webhookUtils.verifySignature(
     req.body,
     signature,
-    secret
+    secret,
+    timestamp
   );
   
   if (!isValid) {
@@ -23,21 +34,20 @@ app.post('/webhook', (req, res) => {
   }
   
   // Parse payload
-  const payload: WebhookPayload = JSON.parse(req.body.toString());
+  const payload: WebhookEvent = webhookUtils.parse(req.body);
   
   // Handle different event types
   switch (payload.event) {
     case 'alert.triggered':
       console.log('🚨 Alert triggered!');
-      console.log(`Alert ID: ${payload.data.alert.id}`);
-      console.log(`Symbol: ${payload.data.alert.symbol}`);
-      console.log(`Condition: ${payload.data.alert.condition}`);
-      console.log(`Threshold: ${payload.data.alert.threshold}`);
-      console.log(`Status: ${payload.data.alert.status}`);
-      console.log(`\nStock Info:`);
-      console.log(`  Price: $${payload.data.stock.price}`);
-      console.log(`  Change: ${payload.data.stock.change}`);
-      console.log(`  Change %: ${payload.data.stock.change_percent}%`);
+      console.log(`Alert ID: ${payload.data.alert_id}`);
+      console.log(`Symbol: ${payload.data.symbol}`);
+      console.log(`Condition: ${payload.data.condition}`);
+      console.log(`Threshold: ${payload.data.threshold}`);
+      console.log(`Notification: ${payload.data.notification}`);
+      console.log(`Status: ${payload.data.status}`);
+      console.log(`Triggered at: ${payload.data.triggered_at}`);
+      console.log(`Price: $${payload.data.price}`);
 
       // Your custom logic here
       // e.g., send notification, execute trade, update database, etc.

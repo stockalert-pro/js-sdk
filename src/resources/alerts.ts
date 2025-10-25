@@ -2,11 +2,17 @@ import { BaseResource } from './base';
 import { ValidationError } from '../errors';
 import type {
   Alert,
+  AlertActivateData,
+  AlertDeleteData,
+  AlertHistory,
+  AlertPauseData,
+  AlertStats,
+  AlertVerificationResult,
   CreateAlertRequest,
-  UpdateAlertRequest,
   ListAlertsParams,
   PaginatedResponse,
-  DeleteResponse,
+  ResourceResponse,
+  UpdateAlertRequest,
 } from '../types';
 
 export class AlertsResource extends BaseResource {
@@ -17,7 +23,7 @@ export class AlertsResource extends BaseResource {
    */
   list(params?: ListAlertsParams): Promise<PaginatedResponse<Alert>> {
     const sanitizedParams = params ? this.sanitizeListParams(params) : undefined;
-    return this.get<PaginatedResponse<Alert>>('/api/v1/alerts', { params: sanitizedParams });
+    return this.get<PaginatedResponse<Alert>>('/alerts', { params: sanitizedParams });
   }
 
   /**
@@ -28,8 +34,9 @@ export class AlertsResource extends BaseResource {
    */
   create(data: CreateAlertRequest): Promise<Alert> {
     this.validateCreateRequest(data);
-    // Proper solution: convert to Record without type assertion
-    return this.post<Alert>('/api/v1/alerts', this.toRecord(data));
+    return this.unwrap(
+      this.post<ResourceResponse<Alert>>('/alerts', this.toRecord(data))
+    );
   }
 
   /**
@@ -40,7 +47,9 @@ export class AlertsResource extends BaseResource {
    */
   retrieve(id: string): Promise<Alert> {
     this.validateId(id, 'Alert');
-    return this.get<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}`);
+    return this.unwrap(
+      this.get<ResourceResponse<Alert>>(`/alerts/${encodeURIComponent(id)}`)
+    );
   }
 
   /**
@@ -53,7 +62,12 @@ export class AlertsResource extends BaseResource {
   update(id: string, data: UpdateAlertRequest): Promise<Alert> {
     this.validateId(id, 'Alert');
     this.validateUpdateRequest(data);
-    return this.put<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}`, this.toRecord(data));
+    return this.unwrap(
+      this.put<ResourceResponse<Alert>>(
+        `/alerts/${encodeURIComponent(id)}`,
+        this.toRecord(data)
+      )
+    );
   }
 
   /**
@@ -62,9 +76,13 @@ export class AlertsResource extends BaseResource {
    * @returns Deletion confirmation
    * @throws {ValidationError} If ID is invalid
    */
-  remove(id: string): Promise<DeleteResponse> {
+  remove(id: string): Promise<AlertDeleteData> {
     this.validateId(id, 'Alert');
-    return this.delete<DeleteResponse>(`/api/v1/alerts/${encodeURIComponent(id)}`);
+    return this.unwrap(
+      this.delete<ResourceResponse<AlertDeleteData>>(
+        `/alerts/${encodeURIComponent(id)}`
+      )
+    );
   }
 
   /**
@@ -73,9 +91,13 @@ export class AlertsResource extends BaseResource {
    * @returns Updated alert
    * @throws {ValidationError} If ID is invalid
    */
-  pause(id: string): Promise<Alert> {
+  pause(id: string): Promise<AlertPauseData> {
     this.validateId(id, 'Alert');
-    return this.post<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}/pause`);
+    return this.unwrap(
+      this.post<ResourceResponse<AlertPauseData>>(
+        `/alerts/${encodeURIComponent(id)}/pause`
+      )
+    );
   }
 
   /**
@@ -84,9 +106,13 @@ export class AlertsResource extends BaseResource {
    * @returns Updated alert
    * @throws {ValidationError} If ID is invalid
    */
-  activate(id: string): Promise<Alert> {
+  activate(id: string): Promise<AlertActivateData> {
     this.validateId(id, 'Alert');
-    return this.post<Alert>(`/api/v1/alerts/${encodeURIComponent(id)}/activate`);
+    return this.unwrap(
+      this.post<ResourceResponse<AlertActivateData>>(
+        `/alerts/${encodeURIComponent(id)}/activate`
+      )
+    );
   }
 
   /**
@@ -96,17 +122,27 @@ export class AlertsResource extends BaseResource {
    * @returns Paginated alert history
    * @throws {ValidationError} If ID is invalid
    */
-  history(id: string, params?: { page?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+  history(
+    id: string,
+    params?: { page?: number; limit?: number }
+  ): Promise<PaginatedResponse<AlertHistory>> {
     this.validateId(id, 'Alert');
-    return this.get<PaginatedResponse<any>>(`/api/v1/alerts/${encodeURIComponent(id)}/history`, { params });
+    return this.get<PaginatedResponse<AlertHistory>>(
+      `/alerts/${encodeURIComponent(id)}/history`,
+      { params }
+    );
   }
 
   /**
    * Get alert statistics
    * @returns Alert statistics including status counts
    */
-  stats(): Promise<{ statusCounts: Record<string, number>; total: number }> {
-    return this.get<{ statusCounts: Record<string, number>; total: number }>('/api/v1/alerts/stats');
+  stats(): Promise<AlertStats> {
+    return this.unwrap(
+      this.get<ResourceResponse<AlertStats>>('/alerts/stats', {
+        headers: this.requireBearerHeaders('Alert statistics require bearer authentication'),
+      })
+    );
   }
 
   /**
@@ -114,11 +150,21 @@ export class AlertsResource extends BaseResource {
    * @param token - Verification token
    * @returns Verified alert
    */
-  verify(token: string): Promise<Alert> {
+  verify(token: string): Promise<AlertVerificationResult> {
     if (!token || typeof token !== 'string' || token.trim() === '') {
       throw new ValidationError('Verification token is required');
     }
-    return this.post<Alert>('/api/v1/alerts/verify', { token });
+    return this.unwrap(
+      this.post<ResourceResponse<AlertVerificationResult>>(
+        '/alerts/verify',
+        { token },
+        {
+          headers: this.requireBearerHeaders(
+            'Alert verification requires bearer authentication'
+          ),
+        }
+      )
+    );
   }
 
   /**
@@ -145,8 +191,9 @@ export class AlertsResource extends BaseResource {
       }
 
       // Check if we've reached the end
+      const totalPages = response.meta.pagination?.total_pages;
       if (response.data.length < limit ||
-          (response.meta.pagination.totalPages !== undefined && page >= response.meta.pagination.totalPages)) {
+          (typeof totalPages === 'number' && page >= totalPages)) {
         break;
       }
 
@@ -194,8 +241,8 @@ export class AlertsResource extends BaseResource {
     }
 
     // Validate symbol format (basic check)
-    if (!/^[A-Z]{1,5}$/.test(data.symbol.trim())) {
-      throw new ValidationError('Symbol must be 1-5 uppercase letters');
+    if (!/^[A-Z0-9.-]{1,10}$/.test(data.symbol.trim())) {
+      throw new ValidationError('Symbol must be 1-10 chars: A-Z, 0-9, dot or hyphen');
     }
 
     // Validate notification channel if provided
@@ -215,20 +262,31 @@ export class AlertsResource extends BaseResource {
       'price_above', 'price_below', 'price_change_up', 'price_change_down',
       'new_high', 'new_low', 'ma_touch_above', 'ma_touch_below',
       'volume_change', 'rsi_limit', 'pe_ratio_below', 'pe_ratio_above',
-      'forward_pe_below', 'forward_pe_above', 'earnings_announcement', 'dividend_ex_date'
+      'forward_pe_below', 'forward_pe_above'
     ];
 
     const noThreshold = [
-      'ma_crossover_golden', 'ma_crossover_death', 'reminder', 'daily_reminder', 'dividend_payment'
+      'ma_crossover_golden', 'ma_crossover_death', 'reminder', 'daily_reminder',
+      'earnings_announcement', 'dividend_ex_date', 'dividend_payment'
     ];
 
     if (requiresThreshold.includes(data.condition)) {
-      if (typeof data.threshold !== 'number' || isNaN(data.threshold) || !isFinite(data.threshold)) {
+      if (
+        data.threshold === undefined ||
+        data.threshold === null ||
+        typeof data.threshold !== 'number' ||
+        Number.isNaN(data.threshold) ||
+        !Number.isFinite(data.threshold)
+      ) {
         throw new ValidationError(`${data.condition} requires a valid threshold value`);
       }
     }
 
-    if (noThreshold.includes(data.condition) && data.threshold !== undefined) {
+    if (
+      noThreshold.includes(data.condition) &&
+      data.threshold !== undefined &&
+      data.threshold !== null
+    ) {
       throw new ValidationError(`${data.condition} does not use a threshold value`);
     }
 
@@ -245,7 +303,7 @@ export class AlertsResource extends BaseResource {
         break;
 
       case 'rsi_limit':
-        if (data.threshold !== undefined && (data.threshold < 0 || data.threshold > 100)) {
+        if (data.threshold !== undefined && data.threshold !== null && (data.threshold < 0 || data.threshold > 100)) {
           throw new ValidationError('RSI threshold must be between 0 and 100');
         }
         break;
@@ -265,7 +323,7 @@ export class AlertsResource extends BaseResource {
       case 'price_change_up':
       case 'price_change_down':
       case 'volume_change':
-        if (data.threshold !== undefined && data.threshold < 0) {
+        if (data.threshold !== undefined && data.threshold !== null && data.threshold < 0) {
           throw new ValidationError(`${data.condition} threshold must be a positive percentage`);
         }
         break;
@@ -297,7 +355,11 @@ export class AlertsResource extends BaseResource {
     }
 
     // Validate threshold if provided
-    if (data.threshold !== undefined && (typeof data.threshold !== 'number' || isNaN(data.threshold) || !isFinite(data.threshold))) {
+    if (
+      data.threshold !== undefined &&
+      data.threshold !== null &&
+      (typeof data.threshold !== 'number' || Number.isNaN(data.threshold) || !Number.isFinite(data.threshold))
+    ) {
       throw new ValidationError('Threshold must be a valid number');
     }
   }
@@ -312,6 +374,14 @@ export class AlertsResource extends BaseResource {
     if (!uuidRegex.test(id)) {
       throw new ValidationError(`${type} ID must be a valid UUID`);
     }
+  }
+
+  private requireBearerHeaders(message: string): Record<string, string> {
+    const bearer = this.config.bearerToken;
+    if (!bearer) {
+      throw new ValidationError(message);
+    }
+    return { Authorization: `Bearer ${bearer}` };
   }
 
   private sanitizeListParams(
@@ -332,10 +402,10 @@ export class AlertsResource extends BaseResource {
       sanitized['search'] = params.search;
     }
     if (params.sortField !== undefined) {
-      sanitized['sortField'] = params.sortField;
+      sanitized['sort_field'] = params.sortField;
     }
     if (params.sortDirection !== undefined) {
-      sanitized['sortDirection'] = params.sortDirection;
+      sanitized['sort_direction'] = params.sortDirection;
     }
     if (params.minimal !== undefined) {
       sanitized['minimal'] = params.minimal;

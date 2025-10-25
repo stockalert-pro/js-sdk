@@ -28,9 +28,9 @@ async function main() {
 
     // Update alert
     const updated = await client.alerts.update(newAlert.id, {
-      status: 'paused'
+      threshold: 210
     });
-    console.log(`Updated alert status: ${updated.status}`);
+    console.log(`Updated alert threshold: ${updated.threshold}`);
 
     // Delete alert
     await client.alerts.remove(newAlert.id);

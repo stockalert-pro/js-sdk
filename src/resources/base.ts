@@ -1,11 +1,11 @@
-import { 
-  StockAlertError, 
-  RateLimitError, 
-  ApiError, 
+import {
+  StockAlertError,
+  RateLimitError,
+  ApiError,
   NetworkError,
-  AuthenticationError 
+  AuthenticationError
 } from '../errors';
-import type { ApiResponse, RequestOptions } from '../types';
+import type { ApiResponse, RequestOptions, ResourceResponse } from '../types';
 
 interface ResourceConfig {
   apiKey: string;
@@ -13,6 +13,8 @@ interface ResourceConfig {
   timeout: number;
   maxRetries: number;
   debug: boolean;
+  userAgent: string;
+  bearerToken?: string;
 }
 
 // Request key interface removed - not needed
@@ -69,13 +71,21 @@ export abstract class BaseResource {
     );
 
     const headers: Record<string, string> = {
-      'X-API-Key': this.config.apiKey,
       'Content-Type': 'application/json',
-      'User-Agent': '@stockalert/sdk/1.0.0',
+      'User-Agent': this.config.userAgent,
       'Accept': 'application/json',
       'Accept-Encoding': 'gzip, deflate',
       ...options.headers,
     };
+
+    // Prefer Bearer auth when a token is configured; otherwise fall back to API key
+    if (!('Authorization' in headers)) {
+      if (this.config.bearerToken) {
+        headers['Authorization'] = `Bearer ${this.config.bearerToken}`;
+      } else {
+        headers['X-API-Key'] = this.config.apiKey;
+      }
+    }
 
     const fetchOptions: RequestInit = {
       method,
@@ -226,8 +236,24 @@ export abstract class BaseResource {
     return this.request<T>('PUT', path, { ...options, body });
   }
 
+  protected patch<T>(
+    path: string,
+    body?: Record<string, unknown>,
+    options?: RequestOptions
+  ): Promise<T> {
+    return this.request<T>('PATCH', path, { ...options, body });
+  }
+
   protected delete<T>(path: string, options?: RequestOptions): Promise<T> {
     return this.request<T>('DELETE', path, options);
+  }
+
+  protected async unwrap<T>(promise: Promise<ResourceResponse<T> | T>): Promise<T> {
+    const result = await promise;
+    if (result && typeof result === 'object' && 'data' in (result as Record<string, unknown>)) {
+      return (result as ResourceResponse<T>).data;
+    }
+    return result as T;
   }
 
   protected toRecord(data: unknown): Record<string, unknown> {
