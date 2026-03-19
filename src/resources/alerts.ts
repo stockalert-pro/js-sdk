@@ -6,8 +6,6 @@ import type {
   AlertDeleteData,
   AlertHistory,
   AlertPauseData,
-  AlertStats,
-  AlertVerificationResult,
   CreateAlertRequest,
   ListAlertsParams,
   PaginatedResponse,
@@ -133,39 +131,7 @@ export class AlertsResource extends BaseResource {
     );
   }
 
-  /**
-   * Get alert statistics
-   * @returns Alert statistics including status counts
-   */
-  stats(): Promise<AlertStats> {
-    return this.unwrap(
-      this.get<ResourceResponse<AlertStats>>('/alerts/stats', {
-        headers: this.requireBearerHeaders('Alert statistics require bearer authentication'),
-      })
-    );
-  }
-
-  /**
-   * Verify an alert via token (for guest alerts)
-   * @param token - Verification token
-   * @returns Verified alert
-   */
-  verify(token: string): Promise<AlertVerificationResult> {
-    if (!token || typeof token !== 'string' || token.trim() === '') {
-      throw new ValidationError('Verification token is required');
-    }
-    return this.unwrap(
-      this.post<ResourceResponse<AlertVerificationResult>>(
-        '/alerts/verify',
-        { token },
-        {
-          headers: this.requireBearerHeaders(
-            'Alert verification requires bearer authentication'
-          ),
-        }
-      )
-    );
-  }
+  // Internal endpoints removed: stats(), verify()
 
   /**
    * Iterate through all alerts with automatic pagination
@@ -260,14 +226,15 @@ export class AlertsResource extends BaseResource {
   private validateConditionSpecificRequirements(data: CreateAlertRequest): void {
     const requiresThreshold = [
       'price_above', 'price_below', 'price_change_up', 'price_change_down',
-      'new_high', 'new_low', 'ma_touch_above', 'ma_touch_below',
+      'reminder', 'ma_touch_above', 'ma_touch_below',
       'volume_change', 'rsi_limit', 'pe_ratio_below', 'pe_ratio_above',
-      'forward_pe_below', 'forward_pe_above'
+      'forward_pe_below', 'forward_pe_above', 'earnings_announcement',
+      'dividend_ex_date', 'insider_transactions'
     ];
 
     const noThreshold = [
-      'ma_crossover_golden', 'ma_crossover_death', 'reminder', 'daily_reminder',
-      'earnings_announcement', 'dividend_ex_date', 'dividend_payment'
+      'new_high', 'new_low', 'ma_crossover_golden', 'ma_crossover_death',
+      'daily_reminder', 'dividend_payment'
     ];
 
     if (requiresThreshold.includes(data.condition)) {
@@ -294,11 +261,13 @@ export class AlertsResource extends BaseResource {
     switch (data.condition) {
       case 'ma_touch_above':
       case 'ma_touch_below':
-        if (!data.parameters?.ma_period) {
-          throw new ValidationError(`${data.condition} requires ma_period parameter (50 or 200)`);
-        }
-        if (![50, 200].includes(data.parameters.ma_period as number)) {
-          throw new ValidationError('ma_period must be either 50 or 200');
+        if (
+          data.threshold === undefined ||
+          data.threshold === null ||
+          !Number.isInteger(data.threshold) ||
+          data.threshold <= 0
+        ) {
+          throw new ValidationError(`${data.condition} requires a positive moving average period as threshold`);
         }
         break;
 
@@ -315,8 +284,58 @@ export class AlertsResource extends BaseResource {
         break;
 
       case 'daily_reminder':
-        if (!data.parameters?.reminder_time) {
-          throw new ValidationError('Daily reminder alerts require reminder_time parameter');
+        if (
+          data.parameters?.deliveryTime !== undefined &&
+          data.parameters.deliveryTime !== 'market_open' &&
+          data.parameters.deliveryTime !== 'after_market_close'
+        ) {
+          throw new ValidationError(
+            'Daily reminder deliveryTime must be "market_open" or "after_market_close"'
+          );
+        }
+        break;
+
+      case 'dividend_payment':
+        if (
+          typeof data.parameters?.shares !== 'number' ||
+          !Number.isFinite(data.parameters.shares) ||
+          data.parameters.shares <= 0
+        ) {
+          throw new ValidationError('Dividend payment alerts require a positive shares parameter');
+        }
+        break;
+
+      case 'insider_transactions':
+        if (
+          data.threshold !== undefined &&
+          data.threshold !== null &&
+          data.threshold <= 0
+        ) {
+          throw new ValidationError('insider_transactions threshold must be greater than 0');
+        }
+        if (
+          data.parameters?.direction !== undefined &&
+          !['buy', 'sell', 'both'].includes(String(data.parameters.direction))
+        ) {
+          throw new ValidationError('insider_transactions direction must be buy, sell or both');
+        }
+        if (
+          data.parameters?.minExecutives !== undefined &&
+          (!Number.isInteger(data.parameters.minExecutives) || Number(data.parameters.minExecutives) < 1)
+        ) {
+          throw new ValidationError('insider_transactions minExecutives must be a positive integer');
+        }
+        if (
+          data.parameters?.windowDays !== undefined &&
+          (!Number.isInteger(data.parameters.windowDays) || Number(data.parameters.windowDays) < 1)
+        ) {
+          throw new ValidationError('insider_transactions windowDays must be a positive integer');
+        }
+        if (
+          data.parameters?.openMarketOnly !== undefined &&
+          typeof data.parameters.openMarketOnly !== 'boolean'
+        ) {
+          throw new ValidationError('insider_transactions openMarketOnly must be a boolean');
         }
         break;
 
@@ -376,13 +395,7 @@ export class AlertsResource extends BaseResource {
     }
   }
 
-  private requireBearerHeaders(message: string): Record<string, string> {
-    const bearer = this.config.bearerToken;
-    if (!bearer) {
-      throw new ValidationError(message);
-    }
-    return { Authorization: `Bearer ${bearer}` };
-  }
+  // Internal-only auth helpers removed
 
   private sanitizeListParams(
     params: ListAlertsParams

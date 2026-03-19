@@ -4,8 +4,11 @@ import { ValidationError } from '../errors';
 import type {
   ListResponse,
   ResourceResponse,
+  WebhookAlertData,
   WebhookEvent,
+  WebhookEventData,
   WebhookEventName,
+  WebhookStockData,
   WebhookEventType,
 } from '../types';
 
@@ -52,6 +55,8 @@ const KNOWN_WEBHOOK_EVENT_NAMES: ReadonlyArray<WebhookEventName> = [
   'alert.deleted',
   'alert.created',
 ];
+const KNOWN_ALERT_STATUSES = ['active', 'paused', 'triggered', 'inactive'] as const;
+const KNOWN_NOTIFICATION_CHANNELS = ['email', 'sms'] as const;
 
 export class WebhooksResource extends BaseResource {
   /**
@@ -145,7 +150,13 @@ export class WebhooksResource extends BaseResource {
     secret: string,
     timestamp?: number | string
   ): boolean {
-    if (!payload || signature.length === 0 || secret.length === 0) {
+    if (
+      !payload ||
+      typeof signature !== 'string' ||
+      typeof secret !== 'string' ||
+      signature.length === 0 ||
+      secret.length === 0
+    ) {
       return false;
     }
 
@@ -212,11 +223,12 @@ export class WebhooksResource extends BaseResource {
       }
     }
 
-    if (!this.isValidWebhookEvent(parsed)) {
+    const normalized = this.normalizeWebhookEvent(parsed);
+    if (!normalized) {
       throw new ValidationError('Invalid webhook payload structure');
     }
 
-    return parsed;
+    return normalized;
   }
 
   private validateCreateRequest(data: CreateWebhookRequest): void {
@@ -260,82 +272,222 @@ export class WebhooksResource extends BaseResource {
     }
   }
 
-  private isValidWebhookEvent(payload: unknown): payload is WebhookEvent {
-    if (typeof payload !== 'object' || payload === null) {
-      return false;
-    }
-
-    const p = payload as Record<string, unknown>;
-
-    if (typeof p['id'] !== 'string' || typeof p['event'] !== 'string') {
-      return false;
-    }
-
-    if (!KNOWN_WEBHOOK_EVENT_NAMES.includes(p['event'] as WebhookEventName)) {
-      return false;
-    }
-
-    const normalizedTimestamp = this.normalizeTimestamp(p['timestamp']);
-    if (normalizedTimestamp === null) {
-      return false;
-    }
-    p['timestamp'] = normalizedTimestamp;
-
-    if (typeof p['data'] !== 'object' || p['data'] === null) {
-      return false;
-    }
-
-    const data = p['data'] as Record<string, unknown>;
-
-    if (typeof data['alert_id'] !== 'string' || typeof data['symbol'] !== 'string') {
-      return false;
-    }
-
-    if (typeof data['condition'] !== 'string' || typeof data['notification'] !== 'string') {
-      return false;
-    }
-
-    if (typeof data['status'] !== 'string') {
-      return false;
+  private normalizeWebhookEvent(payload: unknown): WebhookEvent | null {
+    if (!this.isRecord(payload)) {
+      return null;
     }
 
     if (
-      data['threshold'] !== undefined &&
-      data['threshold'] !== null &&
-      typeof data['threshold'] !== 'number'
+      typeof payload.event !== 'string' ||
+      !KNOWN_WEBHOOK_EVENT_NAMES.includes(payload.event as WebhookEventName)
     ) {
-      return false;
+      return null;
     }
 
-    if (
-      data['triggered_at'] !== undefined &&
-      data['triggered_at'] !== null &&
-      typeof data['triggered_at'] !== 'string'
-    ) {
-      return false;
+    const timestamp = this.normalizeTimestamp(payload.timestamp);
+    if (timestamp === null || !this.isRecord(payload.data)) {
+      return null;
     }
 
-    if (
-      data['price'] !== undefined &&
-      data['price'] !== null &&
-      typeof data['price'] !== 'number'
-    ) {
-      return false;
+    const data =
+      this.normalizeCurrentEventData(payload.data) ??
+      this.normalizeLegacyEventData(payload.data);
+
+    if (!data) {
+      return null;
     }
 
-    return true;
+    return {
+      id: typeof payload.id === 'string' ? payload.id : undefined,
+      event: payload.event as WebhookEventName,
+      timestamp,
+      data,
+    };
   }
 
-  private normalizeTimestamp(value: unknown): number | null {
+  private normalizeCurrentEventData(payload: Record<string, unknown>): WebhookEventData | null {
+    if (!this.isRecord(payload.alert)) {
+      return null;
+    }
+
+    const alert = this.normalizeAlertData(payload.alert);
+    if (!alert) {
+      return null;
+    }
+
+    if (payload.stock === undefined) {
+      return { alert };
+    }
+
+    if (payload.stock === null) {
+      return { alert, stock: null };
+    }
+
+    const stock = this.normalizeStockData(payload.stock);
+    if (!stock) {
+      return null;
+    }
+
+    return { alert, stock };
+  }
+
+  private normalizeLegacyEventData(payload: Record<string, unknown>): WebhookEventData | null {
+    if (
+      typeof payload.alert_id !== 'string' ||
+      typeof payload.symbol !== 'string' ||
+      typeof payload.condition !== 'string' ||
+      typeof payload.status !== 'string'
+    ) {
+      return null;
+    }
+
+    const alert: WebhookAlertData = {
+      id: payload.alert_id,
+      symbol: payload.symbol,
+      condition: payload.condition as WebhookAlertData['condition'],
+      status: payload.status as WebhookAlertData['status'],
+    };
+
+    if (payload.threshold !== undefined) {
+      if (payload.threshold !== null && typeof payload.threshold !== 'number') {
+        return null;
+      }
+      alert.threshold = payload.threshold as number | null;
+    }
+
+    if (payload.notification !== undefined) {
+      if (
+        typeof payload.notification !== 'string' ||
+        !KNOWN_NOTIFICATION_CHANNELS.includes(
+          payload.notification as (typeof KNOWN_NOTIFICATION_CHANNELS)[number]
+        )
+      ) {
+        return null;
+      }
+      alert.notification = payload.notification as WebhookAlertData['notification'];
+    }
+
+    if (payload.triggered_at !== undefined) {
+      if (payload.triggered_at !== null && typeof payload.triggered_at !== 'string') {
+        return null;
+      }
+      alert.triggered_at = payload.triggered_at as string | null;
+    }
+
+    const eventData: WebhookEventData = { alert };
+    if (payload.price !== undefined) {
+      if (payload.price !== null && typeof payload.price !== 'number') {
+        return null;
+      }
+      eventData.stock = {
+        symbol: payload.symbol,
+        price: payload.price as number | null,
+      };
+    }
+
+    return eventData;
+  }
+
+  private normalizeAlertData(payload: Record<string, unknown>): WebhookAlertData | null {
+    if (
+      typeof payload.id !== 'string' ||
+      typeof payload.symbol !== 'string' ||
+      typeof payload.condition !== 'string' ||
+      typeof payload.status !== 'string' ||
+      !KNOWN_ALERT_STATUSES.includes(payload.status as (typeof KNOWN_ALERT_STATUSES)[number])
+    ) {
+      return null;
+    }
+
+    const alert: WebhookAlertData = {
+      id: payload.id,
+      symbol: payload.symbol,
+      condition: payload.condition as WebhookAlertData['condition'],
+      status: payload.status as WebhookAlertData['status'],
+    };
+
+    if (payload.threshold !== undefined) {
+      if (payload.threshold !== null && typeof payload.threshold !== 'number') {
+        return null;
+      }
+      alert.threshold = payload.threshold as number | null;
+    }
+
+    if (payload.triggered_at !== undefined) {
+      if (payload.triggered_at !== null && typeof payload.triggered_at !== 'string') {
+        return null;
+      }
+      alert.triggered_at = payload.triggered_at as string | null;
+    }
+
+    if (payload.notification !== undefined) {
+      if (
+        typeof payload.notification !== 'string' ||
+        !KNOWN_NOTIFICATION_CHANNELS.includes(
+          payload.notification as (typeof KNOWN_NOTIFICATION_CHANNELS)[number]
+        )
+      ) {
+        return null;
+      }
+      alert.notification = payload.notification as WebhookAlertData['notification'];
+    }
+
+    if (payload.triggered_value !== undefined) {
+      if (payload.triggered_value !== null && typeof payload.triggered_value !== 'number') {
+        return null;
+      }
+      alert.triggered_value = payload.triggered_value as number | null;
+    }
+
+    return alert;
+  }
+
+  private normalizeStockData(payload: unknown): WebhookStockData | null {
+    if (!this.isRecord(payload) || typeof payload.symbol !== 'string') {
+      return null;
+    }
+
+    const stock: WebhookStockData = {
+      symbol: payload.symbol,
+    };
+
+    if (payload.price !== undefined) {
+      if (payload.price !== null && typeof payload.price !== 'number') {
+        return null;
+      }
+      stock.price = payload.price as number | null;
+    }
+
+    if (payload.change !== undefined) {
+      if (payload.change !== null && typeof payload.change !== 'number') {
+        return null;
+      }
+      stock.change = payload.change as number | null;
+    }
+
+    if (payload.change_percent !== undefined) {
+      if (payload.change_percent !== null && typeof payload.change_percent !== 'number') {
+        return null;
+      }
+      stock.change_percent = payload.change_percent as number | null;
+    }
+
+    return stock;
+  }
+
+  private normalizeTimestamp(value: unknown): string | number | null {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value;
     }
 
     if (typeof value === 'string' && value.trim() !== '') {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : null;
+      return value;
     }
 
     return null;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 }

@@ -15,6 +15,10 @@ interface ResourceConfig {
   debug: boolean;
   userAgent: string;
   bearerToken?: string;
+  onRequestStart?: (event: { method: string; path: string }) => void;
+  onRequestSuccess?: (event: { method: string; path: string; duration: number }) => void;
+  onRequestError?: (event: { method: string; path: string; error: Error }) => void;
+  onRateLimit?: (event: { retryAfter: number }) => void;
 }
 
 // Request key interface removed - not needed
@@ -37,7 +41,15 @@ export abstract class BaseResource {
     const requestKey = `${method}:${url.toString()}`;
 
     // Check for rate limit
-    this.checkRateLimit(url.origin);
+    try {
+      this.checkRateLimit(url.origin);
+    } catch (error) {
+      if (error instanceof RateLimitError) {
+        this.config.onRateLimit?.({ retryAfter: error.retryAfter ?? 0 });
+        this.config.onRequestError?.({ method, path: url.pathname, error });
+      }
+      throw error;
+    }
 
     // Deduplication for GET requests
     if (method === 'GET' && this.pendingRequests.has(requestKey)) {
@@ -51,9 +63,14 @@ export abstract class BaseResource {
     
     if (method === 'GET') {
       this.pendingRequests.set(requestKey, requestPromise);
-      requestPromise.finally(() => {
-        this.pendingRequests.delete(requestKey);
-      });
+      requestPromise.then(
+        () => {
+          this.pendingRequests.delete(requestKey);
+        },
+        () => {
+          this.pendingRequests.delete(requestKey);
+        },
+      );
     }
 
     return requestPromise;
@@ -99,6 +116,7 @@ export abstract class BaseResource {
 
     let lastError: Error | null = null;
     const maxRetries = options.retries ?? this.config.maxRetries;
+    this.config.onRequestStart?.({ method, path: url.pathname });
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -137,6 +155,7 @@ export abstract class BaseResource {
           this.rateLimitReset.set(url.origin, resetTime);
 
           const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+          this.config.onRateLimit?.({ retryAfter });
 
           throw new RateLimitError(
             this.extractErrorMessage(data.error, 'Rate limit exceeded'),
@@ -168,33 +187,37 @@ export abstract class BaseResource {
         // For paginated responses, return the entire envelope (without success flag)
         // This preserves the meta object with pagination and rate limit info
         if (data.meta !== undefined) {
+          this.config.onRequestSuccess?.({ method, path: url.pathname, duration: responseTime });
           return { data: data.data, meta: data.meta } as T;
         }
 
         // For single-item responses, just return the data
+        this.config.onRequestSuccess?.({ method, path: url.pathname, duration: responseTime });
         return data.data;
       } catch (error) {
         clearTimeout(timeoutId);
-        
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw new NetworkError('Request timeout');
+        let normalizedError = error instanceof Error ? error : new Error(String(error));
+
+        if (normalizedError.name === 'AbortError') {
+          normalizedError = new NetworkError('Request timeout');
         }
 
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw new NetworkError('Network request failed - check your connection');
+        if (normalizedError instanceof TypeError && normalizedError.message.includes('fetch')) {
+          normalizedError = new NetworkError('Network request failed - check your connection');
         }
 
         // Don't retry client errors (except rate limits)
         if (
-          error instanceof ApiError && 
-          error.statusCode >= 400 && 
-          error.statusCode < 500 && 
-          error.statusCode !== 429
+          normalizedError instanceof ApiError && 
+          normalizedError.statusCode >= 400 && 
+          normalizedError.statusCode < 500 && 
+          normalizedError.statusCode !== 429
         ) {
-          throw error;
+          this.config.onRequestError?.({ method, path: url.pathname, error: normalizedError });
+          throw normalizedError;
         }
 
-        lastError = error instanceof Error ? error : new Error(String(error));
+        lastError = normalizedError;
 
         // Retry with exponential backoff and jitter
         if (attempt < maxRetries) {
@@ -203,12 +226,14 @@ export abstract class BaseResource {
           const delay = baseDelay + jitter;
           
           // If rate limited, wait for reset time
-          if (error instanceof RateLimitError && error.retryAfter) {
-            const waitTime = error.retryAfter * 1000;
+          if (normalizedError instanceof RateLimitError && normalizedError.retryAfter) {
+            const waitTime = normalizedError.retryAfter * 1000;
             await this.sleep(waitTime);
           } else {
             await this.sleep(delay);
           }
+        } else if (lastError) {
+          this.config.onRequestError?.({ method, path: url.pathname, error: lastError });
         }
       }
     }

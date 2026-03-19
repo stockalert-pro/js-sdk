@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { StockAlert } from '../src/client';
-import { ValidationError } from '../src/errors';
+import { RateLimitError, ValidationError } from '../src/errors';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('StockAlert Client', () => {
   describe('constructor', () => {
@@ -12,7 +17,7 @@ describe('StockAlert Client', () => {
       expect(client).toBeDefined();
       expect(client.alerts).toBeDefined();
       expect(client.webhooks).toBeDefined();
-      expect(client.apiKeys).toBeDefined();
+      // apiKeys resource is internal and not exposed in public SDK
       expect(client.watchlist).toBeDefined();
       expect(client.stocks).toBeDefined();
       expect(client.user).toBeDefined();
@@ -115,6 +120,108 @@ describe('StockAlert Client', () => {
       const config2 = client.getConfig();
       expect(config).not.toBe(config2);
       expect(config.apiKey).toBe(config2.apiKey);
+    });
+  });
+
+  describe('events', () => {
+    it('should emit request lifecycle events and support unsubscribe', async () => {
+      const fetchMock = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              data: [],
+              meta: {
+                pagination: {
+                  page: 1,
+                  limit: 1,
+                  total: 0,
+                  total_pages: 1,
+                },
+              },
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
+        )
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = new StockAlert({
+        apiKey: 'sk_test_key_123'
+      });
+      const onStart = vi.fn();
+      const onSuccess = vi.fn();
+      client.on('request:start', onStart);
+      const unsubscribe = client.on('request:success', onSuccess);
+
+      await client.alerts.list({ limit: 1 });
+
+      expect(onStart).toHaveBeenCalledWith({
+        method: 'GET',
+        path: '/api/v1/alerts',
+      });
+      expect(onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'GET',
+          path: '/api/v1/alerts',
+          duration: expect.any(Number),
+        })
+      );
+
+      unsubscribe();
+      await client.alerts.list({ limit: 1, page: 2 });
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit rate limit and request error events on final failure', async () => {
+      const resetTime = Date.now() + 1;
+      const fetchMock = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: false,
+              error: {
+                message: 'Too many requests',
+              },
+            }),
+            {
+              status: 429,
+              headers: {
+                'content-type': 'application/json',
+                'X-RateLimit-Reset': String(resetTime),
+              },
+            },
+          ),
+        )
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = new StockAlert({
+        apiKey: 'sk_test_key_123',
+        maxRetries: 0
+      });
+      const onRateLimit = vi.fn();
+      const onError = vi.fn();
+      client.on('rate:limit', onRateLimit);
+      client.on('request:error', onError);
+
+      await expect(client.alerts.list({ limit: 1 })).rejects.toBeInstanceOf(RateLimitError);
+
+      expect(onRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          retryAfter: expect.any(Number),
+        })
+      );
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'GET',
+          path: '/api/v1/alerts',
+          error: expect.any(RateLimitError),
+        })
+      );
     });
   });
 });

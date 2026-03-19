@@ -8,7 +8,6 @@ export type JsonArray = JsonValue[];
 // Branded identifiers
 export type Brand<T, B> = T & { __brand: B };
 export type AlertId = Brand<string, 'AlertId'>;
-export type ApiKeyId = Brand<string, 'ApiKeyId'>;
 export type UserId = Brand<string, 'UserId'>;
 
 // Alerts
@@ -33,18 +32,26 @@ export type AlertCondition =
   | 'forward_pe_above'
   | 'earnings_announcement'
   | 'dividend_ex_date'
-  | 'dividend_payment';
+  | 'dividend_payment'
+  | 'insider_transactions';
 
 export type AlertStatus = 'active' | 'paused' | 'triggered' | 'inactive';
 export type NotificationChannel = 'email' | 'sms';
 
 export interface AlertParameters {
-  ma_period?: number;
-  rsi_period?: number;
-  rsi_threshold?: number;
-  volume_threshold?: number;
+  onboarding_id?: string;
+  period?: number;
+  shortPeriod?: number;
+  longPeriod?: number;
+  direction?: 'up' | 'down' | 'both' | 'buy' | 'sell';
+  hysteresis?: number;
   reminder_date?: string;
   reminder_time?: string;
+  deliveryTime?: 'market_open' | 'after_market_close';
+  shares?: number;
+  minExecutives?: number;
+  windowDays?: number;
+  openMarketOnly?: boolean;
   [key: string]: JsonValue | undefined;
 }
 
@@ -135,16 +142,6 @@ export interface AlertActivateData {
   alert_id: string;
   status: 'active';
   initial_price?: number | null;
-}
-
-export interface AlertStats {
-  total: number;
-  status_counts: Record<string, number>;
-}
-
-export interface AlertVerificationResult {
-  alert_id: string;
-  symbol: string;
 }
 
 // Stocks
@@ -240,33 +237,6 @@ export interface WatchlistOrderData {
   deleted_alerts: number;
 }
 
-// API keys
-export interface ApiKeySummary {
-  id: string;
-  name: string;
-  key_prefix: string;
-  rate_limit_tier: 'basic' | 'premium';
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface ApiKeyCreated {
-  id: string;
-  name: string;
-  key_prefix: string;
-  created_at: string;
-  rate_limit_tier: 'basic' | 'premium';
-  api_key: string;
-}
-
-export interface CreateApiKeyRequest {
-  name: string;
-}
-
-export interface ApiKeyDeleteData {
-  id: string;
-}
-
 // Webhooks
 export type WebhookEventType = 'alert.triggered';
 
@@ -277,21 +247,33 @@ export type WebhookEventName =
   | 'alert.deleted'
   | 'alert.created';
 
-export interface WebhookEventData {
-  alert_id: string;
+export interface WebhookAlertData {
+  id: string;
   symbol: string;
   condition: AlertCondition;
   threshold?: number | null;
-  notification: NotificationChannel;
   status: AlertStatus;
   triggered_at?: string | null;
+  notification?: NotificationChannel;
+  triggered_value?: number | null;
+}
+
+export interface WebhookStockData {
+  symbol: string;
   price?: number | null;
+  change?: number | null;
+  change_percent?: number | null;
+}
+
+export interface WebhookEventData {
+  alert: WebhookAlertData;
+  stock?: WebhookStockData | null;
 }
 
 export interface WebhookEvent {
-  id: string;
+  id?: string;
   event: WebhookEventName;
-  timestamp: number;
+  timestamp: string | number;
   data: WebhookEventData;
 }
 
@@ -308,7 +290,6 @@ export interface UserSubscription {
   cancel_at_period_end: boolean | null;
   quotas: {
     sms: number;
-    whatsapp: number;
   };
   usage: {
     count: number;
@@ -317,8 +298,17 @@ export interface UserSubscription {
     start: string | null;
     end: string | null;
   };
-  alert_count: number;
-  alert_quota: number | null;
+  alerts: {
+    counts: {
+      total: number;
+      by_status: Record<string, number>;
+    };
+    quota: {
+      limit: number | null;
+      remaining: number | null;
+      unlimited: boolean;
+    };
+  };
   watchlist_items_count: number;
   watchlist_quota: number;
 }

@@ -1,6 +1,5 @@
 import { AlertsResource } from './resources/alerts';
 import { WebhooksResource } from './resources/webhooks';
-import { ApiKeysResource } from './resources/api-keys';
 import { WatchlistResource } from './resources/watchlist';
 import { StocksResource } from './resources/stocks';
 import { UserResource } from './resources/user';
@@ -26,7 +25,6 @@ export interface StockAlertEvents {
 export class StockAlert {
   public readonly alerts: AlertsResource;
   public readonly webhooks: WebhooksResource;
-  public readonly apiKeys: ApiKeysResource;
   public readonly watchlist: WatchlistResource;
   public readonly stocks: StocksResource;
   public readonly user: UserResource;
@@ -65,11 +63,16 @@ export class StockAlert {
       debug: this.config.debug,
       userAgent: this.config.userAgent,
       bearerToken: this.config.bearerToken,
+      onRequestStart: (event: { method: string; path: string }) => this.emit('request:start', event),
+      onRequestSuccess: (event: { method: string; path: string; duration: number }) =>
+        this.emit('request:success', event),
+      onRequestError: (event: { method: string; path: string; error: Error }) =>
+        this.emit('request:error', event),
+      onRateLimit: (event: { retryAfter: number }) => this.emit('rate:limit', event),
     };
 
     this.alerts = new AlertsResource(resourceConfig);
     this.webhooks = new WebhooksResource(resourceConfig);
-    this.apiKeys = new ApiKeysResource(resourceConfig);
     this.watchlist = new WatchlistResource(resourceConfig);
     this.stocks = new StocksResource(resourceConfig);
     this.user = new UserResource(resourceConfig);
