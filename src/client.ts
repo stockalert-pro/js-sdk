@@ -51,7 +51,7 @@ export class StockAlert {
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
       debug: config.debug ?? false,
-      userAgent: config.userAgent ?? '@stockalert/sdk/2.1.1',
+      userAgent: config.userAgent ?? '@stockalert/sdk/2.1.2',
       bearerToken: config.bearerToken,
     };
 
