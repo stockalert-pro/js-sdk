@@ -1,5 +1,5 @@
 // Main export
-export { StockAlert, type StockAlertEvents } from './client';
+export { StockAlert, VERSION, type StockAlertEvents } from './client';
 
 // Type exports
 export * from './types';
@@ -25,6 +25,3 @@ export {
 
 // Utility exports
 export { detectEnvironment, checkBrowserSecurity, type Environment } from './utils/environment';
-
-// Version
-export const VERSION = '2.2.0';
