@@ -59,11 +59,11 @@ describe('StockAlert Client', () => {
       });
       
       const config = client.getConfig();
-      expect(config.baseUrl).toBe('https://stockalert.pro/api/v1');
+      expect(config.baseUrl).toBe('https://api.stockalert.pro/v1');
       expect(config.timeout).toBe(30000);
       expect(config.maxRetries).toBe(3);
       expect(config.debug).toBe(false);
-      expect(config.userAgent).toBe('@stockalert/sdk/2.1.2');
+      expect(config.userAgent).toBe('@stockalert/sdk/2.2.0');
     });
 
     it('should accept custom configuration', () => {
@@ -161,12 +161,12 @@ describe('StockAlert Client', () => {
 
       expect(onStart).toHaveBeenCalledWith({
         method: 'GET',
-        path: '/api/v1/alerts',
+        path: '/v1/alerts',
       });
       expect(onSuccess).toHaveBeenCalledWith(
         expect.objectContaining({
           method: 'GET',
-          path: '/api/v1/alerts',
+          path: '/v1/alerts',
           duration: expect.any(Number),
         })
       );
@@ -218,7 +218,7 @@ describe('StockAlert Client', () => {
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({
           method: 'GET',
-          path: '/api/v1/alerts',
+          path: '/v1/alerts',
           error: expect.any(RateLimitError),
         })
       );

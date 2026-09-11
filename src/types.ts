@@ -33,7 +33,8 @@ export type AlertCondition =
   | 'earnings_announcement'
   | 'dividend_ex_date'
   | 'dividend_payment'
-  | 'insider_transactions';
+  | 'insider_transactions'
+  | 'social_buzz';
 
 export type AlertStatus = 'active' | 'paused' | 'triggered' | 'inactive';
 export type NotificationChannel = 'email' | 'sms';
@@ -43,7 +44,7 @@ export interface AlertParameters {
   period?: number;
   shortPeriod?: number;
   longPeriod?: number;
-  direction?: 'up' | 'down' | 'both' | 'buy' | 'sell';
+  direction?: 'up' | 'down' | 'both' | 'buy' | 'sell' | 'rising' | 'falling';
   hysteresis?: number;
   reminder_date?: string;
   reminder_time?: string;
