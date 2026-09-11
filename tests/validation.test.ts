@@ -169,6 +169,33 @@ describe('AlertsResource validation', () => {
         },
       })
     ).not.toThrow();
+
+    expect(() =>
+      validateCreateRequest({
+        symbol: 'TSLA',
+        condition: 'social_buzz',
+        notification: 'email',
+      })
+    ).toThrow('social_buzz direction must be rising or falling');
+
+    expect(() =>
+      validateCreateRequest({
+        symbol: 'TSLA',
+        condition: 'social_buzz',
+        threshold: 10,
+        notification: 'email',
+        parameters: { direction: 'rising' },
+      })
+    ).toThrow('social_buzz does not use a threshold value');
+
+    expect(() =>
+      validateCreateRequest({
+        symbol: 'TSLA',
+        condition: 'social_buzz',
+        notification: 'email',
+        parameters: { direction: 'rising' },
+      })
+    ).not.toThrow();
   });
 
   it('validates update payloads', () => {

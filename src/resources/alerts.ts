@@ -234,7 +234,7 @@ export class AlertsResource extends BaseResource {
 
     const noThreshold = [
       'new_high', 'new_low', 'ma_crossover_golden', 'ma_crossover_death',
-      'daily_reminder', 'dividend_payment'
+      'daily_reminder', 'dividend_payment', 'social_buzz'
     ];
 
     if (requiresThreshold.includes(data.condition)) {
@@ -302,6 +302,15 @@ export class AlertsResource extends BaseResource {
           data.parameters.shares <= 0
         ) {
           throw new ValidationError('Dividend payment alerts require a positive shares parameter');
+        }
+        break;
+
+      case 'social_buzz':
+        if (
+          data.parameters?.direction !== 'rising' &&
+          data.parameters?.direction !== 'falling'
+        ) {
+          throw new ValidationError('social_buzz direction must be rising or falling');
         }
         break;
 

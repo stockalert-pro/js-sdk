@@ -6,7 +6,7 @@ const app = express();
 
 const webhookUtils = new WebhooksResource({
   apiKey: 'sk_placeholder',
-  baseUrl: 'https://stockalert.pro/api/v1',
+  baseUrl: 'https://api.stockalert.pro/v1',
   timeout: 5000,
   maxRetries: 0,
   debug: false,

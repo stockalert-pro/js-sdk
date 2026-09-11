@@ -7,7 +7,9 @@ import { ValidationError } from './errors';
 import { checkBrowserSecurity, detectEnvironment } from './utils/environment';
 import type { StockAlertConfig } from './types';
 
-const DEFAULT_BASE_URL = 'https://stockalert.pro/api/v1';
+export const VERSION = '2.2.0';
+
+const DEFAULT_BASE_URL = 'https://api.stockalert.pro/v1';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -51,7 +53,7 @@ export class StockAlert {
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
       debug: config.debug ?? false,
-      userAgent: config.userAgent ?? '@stockalert/sdk/2.1.2',
+      userAgent: config.userAgent ?? `@stockalert/sdk/${VERSION}`,
       bearerToken: config.bearerToken,
     };
 
